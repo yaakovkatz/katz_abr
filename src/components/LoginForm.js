@@ -70,6 +70,10 @@ const LoginForm = () => {
 
             const data = await response.json();
 
+
+            console.log('Server response:', data);
+            console.log('Errors:', data.errors || [data.message]);
+
             if (response.ok) {
                 if (data.user?.rememberToken) {
                     localStorage.setItem('rememberToken', data.user.rememberToken);
