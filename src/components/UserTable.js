@@ -1,28 +1,18 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
-const UserTable = ({ showModal, setShowModal }) => {
-    // State definitions
+const UserTable = ({ showModal, setShowModal, userId }) => {
+    // ניהול מצב הטופס
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [address, setAddress] = useState('');
     const [formError, setFormError] = useState(null);
+
+    // ניהול מצב הנתונים והתצוגה
+    const [data, setData] = useState([]);
+    const [filteredData, setFilteredData] = useState(data);
     const [globalSearch, setGlobalSearch] = useState('');
-
-    const [data, setData] = useState(() => {
-        const savedData = localStorage.getItem('dashboardData');
-        return savedData ? JSON.parse(savedData) : [
-            {
-                id: 1,
-                name: 'יוסי כהן',
-                email: 'yossi@example.com',
-                phone: '054-1234567',
-                address: 'תל אביב',
-                additionalInfo: 'מידע נוסף על יוסי'
-            }
-        ];
-    });
-
     const [expandedRow, setExpandedRow] = useState(null);
     const [filterCriteria, setFilterCriteria] = useState({
         name: '',
@@ -32,11 +22,72 @@ const UserTable = ({ showModal, setShowModal }) => {
     });
     const [sortColumn, setSortColumn] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
-    const [filteredData, setFilteredData] = useState(data);
     const [viewType, setViewType] = useState('table');
     const [editingItem, setEditingItem] = useState(null);
 
-    // Validation function
+    // טעינת נתונים ראשונית
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await axios.get(`/api/dashboard-data`, {
+                    params: { userId }
+                });
+                setData(response.data);
+                setFilteredData(response.data);
+            } catch (error) {
+                showToast('שגיאה בטעינת נתונים', 'error');
+            }
+        };
+
+        if (userId) {
+            fetchData();
+        }
+    }, [userId]);
+
+    // פונקציות טיפול במידע
+    const handleEdit = (item) => {
+        setEditingItem(item);
+        setName(item.name);
+        setEmail(item.email);
+        setPhone(item.phone);
+        setAddress(item.address);
+        setShowModal(true);
+    };
+
+    const handleDelete = async (id) => {
+        if (window.confirm('האם אתה בטוח שברצונך למחוק נתון זה?')) {
+            try {
+                await axios.delete(`/api/dashboard-data/${id}`, {
+                    params: { userId }
+                });
+                setData(data.filter(item => item.id !== id));
+                showToast('הנתון נמחק בהצלחה');
+            } catch (error) {
+                showToast('שגיאה במחיקת נתונים', 'error');
+            }
+        }
+    };
+
+    const toggleRow = (id) => {
+        setExpandedRow(expandedRow === id ? null : id);
+    };
+
+    // פונקציות עזר
+    const showToast = (message, type = 'success') => {
+        const toastDiv = document.createElement('div');
+        toastDiv.className = `toast show position-fixed bottom-0 end-0 m-3 bg-${type}`;
+        toastDiv.style.zIndex = '1000';
+        toastDiv.innerHTML = `
+            <div class="toast-body text-white">
+                ${message}
+            </div>
+        `;
+        document.body.appendChild(toastDiv);
+        setTimeout(() => {
+            toastDiv.remove();
+        }, 3000);
+    };
+
     const validateForm = () => {
         setFormError(null);
         if (!name.trim()) {
@@ -54,25 +105,51 @@ const UserTable = ({ showModal, setShowModal }) => {
         return true;
     };
 
-    // Toast notification
-    const showToast = (message, type = 'success') => {
-        const toastDiv = document.createElement('div');
-        toastDiv.className = `toast show position-fixed bottom-0 end-0 m-3 bg-${type}`;
-        toastDiv.style.zIndex = '1000';
-        toastDiv.innerHTML = `
-            <div class="toast-body text-white">
-                ${message}
-            </div>
-        `;
-        document.body.appendChild(toastDiv);
-        setTimeout(() => {
-            toastDiv.remove();
-        }, 3000);
+    const handleAddOrUpdateData = async () => {
+        if (!validateForm()) return;
+
+        try {
+            if (editingItem) {
+                const response = await axios.put(
+                    `/api/dashboard-data/${editingItem.id}`,
+                    { name, email, phone, address },
+                    { params: { userId } }
+                );
+                const updatedData = data.map(item =>
+                    item.id === editingItem.id ? response.data : item
+                );
+                setData(updatedData);
+                setEditingItem(null);
+                showToast('הנתונים עודכנו בהצלחה');
+            } else {
+                const response = await axios.post('/api/dashboard-data', {
+                    userId,
+                    name,
+                    email,
+                    phone,
+                    address
+                });
+                setData([...data, response.data]);
+                showToast('נוספו נתונים חדשים בהצלחה');
+            }
+            resetForm();
+        } catch (error) {
+            showToast('שגיאה בשמירת נתונים', 'error');
+        }
     };
 
-    // Export function
+    const resetForm = () => {
+        setName('');
+        setEmail('');
+        setPhone('');
+        setAddress('');
+        setFormError(null);
+        setEditingItem(null);
+        setShowModal(false);
+    };
+
     const exportData = () => {
-        const dataStr = JSON.stringify(data, null, 2);
+        const dataStr = JSON.stringify(filteredData, null, 2);
         const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
         const exportFileDefaultName = 'dashboard-data.json';
         const linkElement = document.createElement('a');
@@ -82,7 +159,7 @@ const UserTable = ({ showModal, setShowModal }) => {
         showToast('הנתונים יוצאו בהצלחה');
     };
 
-    // Filter and sort effect
+    // פילטור ומיון נתונים
     useEffect(() => {
         let filtered = data;
 
@@ -90,7 +167,7 @@ const UserTable = ({ showModal, setShowModal }) => {
         if (globalSearch) {
             filtered = filtered.filter(item =>
                 Object.values(item).some(val =>
-                    val.toString().toLowerCase().includes(globalSearch.toLowerCase())
+                    val?.toString().toLowerCase().includes(globalSearch.toLowerCase())
                 )
             );
         }
@@ -98,7 +175,7 @@ const UserTable = ({ showModal, setShowModal }) => {
         // Specific filters
         filtered = filtered.filter(item =>
             Object.keys(filterCriteria).every(key =>
-                item[key].toLowerCase().includes(filterCriteria[key].toLowerCase())
+                item[key]?.toString().toLowerCase().includes(filterCriteria[key].toLowerCase())
             )
         );
 
@@ -112,80 +189,7 @@ const UserTable = ({ showModal, setShowModal }) => {
         setFilteredData(filtered);
     }, [data, filterCriteria, sortColumn, sortDirection, globalSearch]);
 
-    const toggleRow = (id) => {
-        setExpandedRow(expandedRow === id ? null : id);
-    };
-
-    const handleAddOrUpdateData = () => {
-        if (!validateForm()) return;
-
-        if (editingItem) {
-            const updatedData = data.map(item =>
-                item.id === editingItem.id ? { ...item, name, email, phone, address } : item
-            );
-            setData(updatedData);
-            setEditingItem(null);
-            showToast('הנתונים עודכנו בהצלחה');
-        } else {
-            const newData = [...data, {
-                id: Date.now(),
-                name,
-                email,
-                phone,
-                address,
-                additionalInfo: 'מידע נוסף'
-            }];
-            setData(newData);
-            showToast('נוספו נתונים חדשים בהצלחה');
-        }
-
-        localStorage.setItem('dashboardData', JSON.stringify(data));
-        resetForm();
-    };
-
-    const resetForm = () => {
-        setName('');
-        setEmail('');
-        setPhone('');
-        setAddress('');
-        setFormError(null);
-        setShowModal(false);
-    };
-
-    const handleEdit = (item) => {
-        setEditingItem(item);
-        setName(item.name);
-        setEmail(item.email);
-        setPhone(item.phone);
-        setAddress(item.address);
-        setShowModal(true);
-    };
-
-    const handleDelete = (id) => {
-        if (window.confirm('האם אתה בטוח שברצונך למחוק נתון זה?')) {
-            const updatedData = data.filter(item => item.id !== id);
-            setData(updatedData);
-            localStorage.setItem('dashboardData', JSON.stringify(updatedData));
-            showToast('הנתון נמחק בהצלחה');
-        }
-    };
-
-    const handleFilterChange = (e) => {
-        const { name, value } = e.target;
-        setFilterCriteria(prev => ({ ...prev, [name]: value }));
-    };
-
-    const handleSort = (column) => {
-        setSortColumn(column);
-        setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    };
-
-    const getSortIcon = (column) => {
-        if (sortColumn !== column) return '↕️';
-        return sortDirection === 'asc' ? '↑' : '↓';
-    };
-
-    // Card View Component
+    // קומפוננטת תצוגת כרטיסיה
     const CardView = ({ item }) => (
         <div className="card h-100">
             <div className="card-body d-flex flex-column">
@@ -214,10 +218,16 @@ const UserTable = ({ showModal, setShowModal }) => {
 
     return (
         <div className="container mt-5">
-            {/* Header Section */}
+            {/* כותרת וכפתורי פעולה */}
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h2>לוח בקרה</h2>
                 <div>
+                    <button
+                        className="btn btn-primary me-2"
+                        onClick={() => setShowModal(true)}
+                    >
+                        הוסף נתונים חדשים ➕
+                    </button>
                     <button className="btn btn-success me-2" onClick={exportData}>
                         ייצוא נתונים 📊
                     </button>
@@ -238,7 +248,7 @@ const UserTable = ({ showModal, setShowModal }) => {
                 </div>
             </div>
 
-            {/* Search Section */}
+            {/* חיפוש וסינון */}
             <div className="mb-3">
                 <input
                     type="text"
@@ -247,7 +257,6 @@ const UserTable = ({ showModal, setShowModal }) => {
                     value={globalSearch}
                     onChange={(e) => setGlobalSearch(e.target.value)}
                 />
-
                 <div className="d-flex gap-2">
                     <input
                         type="text"
@@ -255,7 +264,10 @@ const UserTable = ({ showModal, setShowModal }) => {
                         placeholder="סנן לפי שם"
                         name="name"
                         value={filterCriteria.name}
-                        onChange={handleFilterChange}
+                        onChange={(e) => setFilterCriteria(prev => ({
+                            ...prev,
+                            name: e.target.value
+                        }))}
                     />
                     <input
                         type="text"
@@ -263,7 +275,10 @@ const UserTable = ({ showModal, setShowModal }) => {
                         placeholder="סנן לפי אימייל"
                         name="email"
                         value={filterCriteria.email}
-                        onChange={handleFilterChange}
+                        onChange={(e) => setFilterCriteria(prev => ({
+                            ...prev,
+                            email: e.target.value
+                        }))}
                     />
                     <input
                         type="text"
@@ -271,7 +286,10 @@ const UserTable = ({ showModal, setShowModal }) => {
                         placeholder="סנן לפי טלפון"
                         name="phone"
                         value={filterCriteria.phone}
-                        onChange={handleFilterChange}
+                        onChange={(e) => setFilterCriteria(prev => ({
+                            ...prev,
+                            phone: e.target.value
+                        }))}
                     />
                     <input
                         type="text"
@@ -279,12 +297,15 @@ const UserTable = ({ showModal, setShowModal }) => {
                         placeholder="סנן לפי כתובת"
                         name="address"
                         value={filterCriteria.address}
-                        onChange={handleFilterChange}
+                        onChange={(e) => setFilterCriteria(prev => ({
+                            ...prev,
+                            address: e.target.value
+                        }))}
                     />
                 </div>
             </div>
 
-            {/* Main Content */}
+            {/* תצוגת נתונים */}
             {viewType === 'table' ? (
                 <div className="accordion" id="userAccordion">
                     {filteredData.map((item, index) => (
@@ -292,15 +313,12 @@ const UserTable = ({ showModal, setShowModal }) => {
                             <h2 className="accordion-header">
                                 <button
                                     className={`accordion-button ${expandedRow === item.id ? '' : 'collapsed'}`}
-                                    type="button"
                                     onClick={() => toggleRow(item.id)}
-                                    aria-expanded={expandedRow === item.id}
-                                    aria-controls={`collapse${item.id}`}
                                 >
                                     <div className="row w-100 align-items-center">
                                         <div className="col">{item.name}</div>
-                                        <div className="col">{item.phone}</div>
                                         <div className="col">{item.email}</div>
+                                        <div className="col">{item.phone}</div>
                                         <div className="col">{item.address}</div>
                                         <div className="col">
                                             <button
@@ -328,30 +346,9 @@ const UserTable = ({ showModal, setShowModal }) => {
                             <div
                                 id={`collapse${item.id}`}
                                 className={`accordion-collapse collapse ${expandedRow === item.id ? 'show' : ''}`}
-                                data-bs-parent="#userAccordion"
                             >
-                                <div className="accordion-body bg-light">
-                                    <div className="row">
-                                        <div className="col">
-                                            <h6 className="mb-3">פרטים נוספים:</h6>
-                                            <div className="card">
-                                                <div className="card-body">
-                                                    <div className="row">
-                                                        <div className="col-md-6">
-                                                            <p className="mb-2"><strong>שם מלא:</strong> {item.name}</p>
-                                                            <p className="mb-2"><strong>טלפון:</strong> {item.phone}</p>
-                                                            <p className="mb-2"><strong>אימייל:</strong> {item.email}</p>
-                                                            <p className="mb-2"><strong>כתובת:</strong> {item.address}</p>
-                                                        </div>
-                                                        <div className="col-md-6">
-                                                            <p className="mb-2"><strong>מידע נוסף:</strong></p>
-                                                            <p>{item.additionalInfo}</p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                <div className="accordion-body">
+                                    <p><strong>מידע נוסף:</strong> {item.additionalInfo}</p>
                                 </div>
                             </div>
                         </div>
@@ -367,90 +364,87 @@ const UserTable = ({ showModal, setShowModal }) => {
                 </div>
             )}
 
-            {/* Modal */}
-            <div className={`modal fade ${showModal ? 'show d-block' : ''}`} tabIndex="-1">
-                <div className="modal-dialog">
-                    <div className="modal-content">
-                        <div className="modal-header">
-                            <h5 className="modal-title">
-                                {editingItem ? 'ערוך נתונים' : 'הוסף נתונים חדשים'}
-                            </h5>
-                            <button
-                                type="button"
-                                className="btn-close"
-                                onClick={resetForm}
-                                aria-label="Close"
-                            ></button>
-                        </div>
-                        <div className="modal-body">
-                            {formError && (
-                                <div className="alert alert-danger">{formError}</div>
-                            )}
-                            <form>
-                                <div className="mb-3">
-                                    <label htmlFor="name" className="form-label">שם</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        id="name"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
+            {/* מודל הוספה/עריכה */}
+            {showModal && (
+                <>
+                    <div className="modal show d-block">
+                        <div className="modal-dialog">
+                            <div className="modal-content">
+                                <div className="modal-header">
+                                    <h5 className="modal-title">
+                                        {editingItem ? 'ערוך נתונים' : 'הוסף נתונים חדשים'}
+                                    </h5>
+                                    <button
+                                        type="button"
+                                        className="btn-close"
+                                        onClick={resetForm}
                                     />
                                 </div>
-                                <div className="mb-3">
-                                    <label htmlFor="email" className="form-label">אימייל</label>
-                                    <input
-                                        type="email"
-                                        className="form-control"
-                                        id="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                    />
+                                <div className="modal-body">
+                                    {formError && <div className="alert alert-danger">{formError}</div>}
+                                    <div className="mb-3">
+                                        <label htmlFor="name" className="form-label">שם</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            id="name"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="mb-3">
+                                        <label htmlFor="email" className="form-label">אימייל</label>
+                                        <input
+                                            type="email"
+                                            className="form-control"
+                                            id="email"
+                                            value={email}
+                                            onChange={(e) => setEmail(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="mb-3">
+                                        <label htmlFor="phone" className="form-label">טלפון</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            id="phone"
+                                            value={phone}
+                                            onChange={(e) => setPhone(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="mb-3">
+                                        <label htmlFor="address" className="form-label">כתובת</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            id="address"
+                                            value={address}
+                                            onChange={(e) => setAddress(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="mb-3">
-                                    <label htmlFor="phone" className="form-label">טלפון</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        id="phone"
-                                        value={phone}
-                                        onChange={(e) => setPhone(e.target.value)}
-                                    />
+                                <div className="modal-footer">
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={resetForm}
+                                    >
+                                        ביטול
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        onClick={handleAddOrUpdateData}
+                                    >
+                                        {editingItem ? 'עדכון נתונים' : 'הוסף נתונים'}
+                                    </button>
                                 </div>
-                                <div className="mb-3">
-                                    <label htmlFor="address" className="form-label">כתובת</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        id="address"
-                                        value={address}
-                                        onChange={(e) => setAddress(e.target.value)}
-                                    />
-                                </div>
-                            </form>
-                        </div>
-                        <div className="modal-footer">
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={resetForm}
-                            >
-                                ביטול
-                            </button>
-                            <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={handleAddOrUpdateData}
-                            >
-                                {editingItem ? 'עדכן' : 'הוסף'}
-                            </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            {/* Modal Backdrop */}
-            {showModal && <div className="modal-backdrop fade show"></div>}
+                    <div className="modal-backdrop show" onClick={resetForm}></div>
+                </>
+            )}
         </div>
     );
 };

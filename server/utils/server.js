@@ -296,6 +296,98 @@ app.post('/update-password', async (req, res) => {
     }
 });
 
+
+app.get('/api/dashboard-data', async (req, res) => {
+    const { userId } = req.query;
+    let connection;
+
+    try {
+        connection = await pool.getConnection();
+        const [rows] = await connection.execute(
+            'SELECT * FROM dashboard_data WHERE user_id = ?',
+            [userId]
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ errors: ['שגיאה בטעינת נתונים'] });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.post('/api/dashboard-data', async (req, res) => {
+    const { userId, name, email, phone, address, additionalInfo } = req.body;
+    let connection;
+
+    try {
+        connection = await pool.getConnection();
+        const [result] = await connection.execute(
+            'INSERT INTO dashboard_data (user_id, name, email, phone, address, additional_info) VALUES (?, ?, ?, ?, ?, ?)',
+            [userId, name, email, phone, address, additionalInfo]
+        );
+
+        const [newRow] = await connection.execute(
+            'SELECT * FROM dashboard_data WHERE id = ?',
+            [result.insertId]
+        );
+
+        res.status(201).json(newRow[0]);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ errors: ['שגיאה בהוספת נתונים'] });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.put('/api/dashboard-data/:id', async (req, res) => {
+    const { name, email, phone, address } = req.body;
+    const { id } = req.params;
+    const { userId } = req.query;
+    let connection;
+
+    try {
+        connection = await pool.getConnection();
+        await connection.execute(
+            'UPDATE dashboard_data SET name = ?, email = ?, phone = ?, address = ? WHERE id = ? AND user_id = ?',
+            [name, email, phone, address, id, userId]
+        );
+
+        const [updatedRow] = await connection.execute(
+            'SELECT * FROM dashboard_data WHERE id = ?',
+            [id]
+        );
+
+        res.json(updatedRow[0]);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ errors: ['שגיאה בעדכון נתונים'] });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
+app.delete('/api/dashboard-data/:id', async (req, res) => {
+    const { id } = req.params;
+    const { userId } = req.query;
+    let connection;
+
+    try {
+        connection = await pool.getConnection();
+        await connection.execute(
+            'DELETE FROM dashboard_data WHERE id = ? AND user_id = ?',
+            [id, userId]
+        );
+        res.json({ message: 'נמחק בהצלחה' });
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ errors: ['שגיאה במחיקת נתונים'] });
+    } finally {
+        if (connection) connection.release();
+    }
+});
+
 // הפעלת השרת
 const PORT = 3001;
 app.listen(PORT, () => {
