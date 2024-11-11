@@ -334,7 +334,7 @@ app.post('/api/dashboard-data', async (req, res) => {
 
         res.status(201).json(newRow[0]);
     } catch (error) {
-        console.error('Error:', error);
+        console.error('Detailed error:', error);
         res.status(500).json({ errors: ['שגיאה בהוספת נתונים'] });
     } finally {
         if (connection) connection.release();

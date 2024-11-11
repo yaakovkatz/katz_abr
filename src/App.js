@@ -8,6 +8,12 @@ import UserTable from './components/UserTable';
 
 const App = () => {
     const [showModal, setShowModal] = useState(false); // הוספנו state למודאל
+    const storedUserId = localStorage.getItem('userId');
+    const userId = storedUserId ? parseInt(storedUserId) : null;
+
+    console.log('Stored user ID:', storedUserId);
+
+
 
     return (
         <Router>
@@ -22,7 +28,7 @@ const App = () => {
                         <UserTable
                             showModal={showModal}
                             setShowModal={setShowModal}
-                            userId={1} // כאן צריך להיות ה-ID של המשתמש המחובר
+                            userId={userId} // משתמשים ב-userId מה-localStorage
                         />
                     } />
                 </Routes>
