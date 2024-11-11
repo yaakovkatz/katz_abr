@@ -7,7 +7,7 @@ const LoginForm = () => {
     const [password, setPassword] = useState('');
     const [errors, setErrors] = useState([]);
 
-    const [isLogin, setIsLogin] = useState(false);
+    const [isLogin, setIsLogin] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
 
@@ -75,10 +75,17 @@ const LoginForm = () => {
             console.log('Errors:', data.errors || [data.message]);
 
             if (response.ok) {
-                if (data.user?.rememberToken) {
-                    localStorage.setItem('rememberToken', data.user.rememberToken);
+                if (data.user) {  // בודקים רק אם יש משתמש
+                    console.log('Saving user data:', data.user);
                     localStorage.setItem('userId', data.user.id);
+
+                    if (data.user.rememberToken) {
+                        localStorage.setItem('rememberToken', data.user.rememberToken);
+                    }
+
+                    console.log('After saving - userId from localStorage:', localStorage.getItem('userId'));
                 }
+
 
                 alert(isLogin ? 'התחברות בוצעה בהצלחה!' : 'הרשמה בוצעה בהצלחה!');
                 setEmail('');

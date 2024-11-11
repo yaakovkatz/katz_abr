@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
+
+axios.defaults.baseURL = 'http://localhost:3001';  // תוסיף את זה כאן
+
+
 const UserTable = ({ showModal, setShowModal, userId }) => {
+    console.log('UserTable received userId:', userId);  // הוסף את זה
+
     // ניהול מצב הטופס
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -24,6 +30,14 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
     const [sortDirection, setSortDirection] = useState('asc');
     const [viewType, setViewType] = useState('table');
     const [editingItem, setEditingItem] = useState(null);
+
+
+
+    useEffect(() => {
+        if (data) {
+            setFilteredData(data);
+        }
+    }, [data]);
 
     // טעינת נתונים ראשונית
     useEffect(() => {
@@ -108,6 +122,9 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
     const handleAddOrUpdateData = async () => {
         if (!validateForm()) return;
 
+        console.log('userId before sending:', userId); // נוסיף את זה כדי לראות את הערך
+
+
         try {
             if (editingItem) {
                 const response = await axios.put(
@@ -129,7 +146,13 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                     phone,
                     address
                 });
-                setData([...data, response.data]);
+                const refreshResponse = await axios.get('/api/dashboard-data', {
+                    params: { userId }
+                });
+
+                // עדכון המצב
+                setData(refreshResponse.data);
+                setFilteredData(refreshResponse.data);
                 showToast('נוספו נתונים חדשים בהצלחה');
             }
             resetForm();

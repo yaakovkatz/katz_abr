@@ -7,7 +7,17 @@ import UserProfile from './components/UserProfile';
 import UserTable from './components/UserTable';
 
 const App = () => {
-    const [showModal, setShowModal] = useState(false); // הוספנו state למודאל
+    const [showModal, setShowModal] = useState(false);
+
+    console.log('1. Starting to check userId');
+    const storedUserId = localStorage.getItem('userId');
+    console.log('2. Stored user ID:', storedUserId, typeof storedUserId);
+    const userId = storedUserId ? parseInt(storedUserId) : null;
+    console.log('3. Final userId:', userId, typeof userId);
+
+    // בדיקת כל התוכן של localStorage
+    console.log('4. All localStorage items:', { ...localStorage });
+
 
     return (
         <Router>
@@ -22,7 +32,7 @@ const App = () => {
                         <UserTable
                             showModal={showModal}
                             setShowModal={setShowModal}
-                            userId={1} // כאן צריך להיות ה-ID של המשתמש המחובר
+                            userId={userId} // משתמשים ב-userId מה-localStorage
                         />
                     } />
                 </Routes>
