@@ -19,7 +19,7 @@ const LoginForm = () => {
             const token = localStorage.getItem('rememberToken');
             if (token) {
                 try {
-                    const response = await fetch('http://localhost:3001/check-remember-token', {
+                    const response = await fetch('https://katz-abr-backend.onrender.com/check-remember-token', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -56,7 +56,7 @@ const LoginForm = () => {
         }
 
         try {
-            const response = await fetch(`http://localhost:3001${isLogin ? '/login' : '/register'}`, {
+            const response = await fetch(`https://katz-abr-backend.onrender.com${isLogin ? '/login' : '/register'}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

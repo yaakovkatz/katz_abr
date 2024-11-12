@@ -17,8 +17,7 @@ const UserProfile = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:3001/update-password', {
-                method: 'POST',
+            const response = await fetch('https://katz-abr-backend.onrender.com/update-password', {                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
@@ -52,8 +51,7 @@ const UserProfile = () => {
         }
 
         try {
-            const response = await fetch('http://localhost:3001/delete-account', {
-                method: 'POST',
+            const response = await fetch('https://katz-abr-backend.onrender.com/delete-account', {                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
