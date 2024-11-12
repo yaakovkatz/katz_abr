@@ -180,7 +180,7 @@
                     );
 
                     if (users.length === 0) {
-                        return res.status(404).json({
+                        return res.status(419).json({
                             errors: ['משתמש לא נמצא']
                         });
                     }
@@ -262,7 +262,7 @@
                     );
 
                     if (users.length === 0) {
-                        return res.status(404).json({
+                        return res.status(420).json({
                             errors: ['משתמש לא נמצא']
                         });
                     }
@@ -350,7 +350,7 @@
 
                     if (userExists.length === 0) {
                         console.log('User not found for ID:', userId);
-                        return res.status(404).json({
+                        return res.status(450).json({
                             errors: ['משתמש לא נמצא']
                         });
                     }
@@ -402,6 +402,47 @@
                 }
             });
 
+
+            app.put('/api/dashboard-data/:id', async (req, res) => {
+                const { id } = req.params;
+                const { name, email, phone, address, userId } = req.body;
+                let connection;
+
+                try {
+                    connection = await pool.getConnection();
+
+                    // בדיקה שהרשומה שייכת למשתמש
+                    const [record] = await connection.execute(
+                        'SELECT * FROM dashboard_data WHERE id = ? AND user_id = ?',
+                        [id, userId]
+                    );
+
+                    if (record.length === 0) {
+                        return res.status(403).json({
+                            errors: ['אין הרשאה לעדכן רשומה זו']
+                        });
+                    }
+
+                    // עדכון הנתונים
+                    await connection.execute(
+                        'UPDATE dashboard_data SET name = ?, email = ?, phone = ?, address = ? WHERE id = ? AND user_id = ?',
+                        [name, email, phone, address, id, userId]
+                    );
+
+                    // קבלת הנתונים המעודכנים
+                    const [updatedRecord] = await connection.execute(
+                        'SELECT * FROM dashboard_data WHERE id = ?',
+                        [id]
+                    );
+
+                    res.json(updatedRecord[0]);
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(500).json({ errors: ['שגיאה בעדכון נתונים'] });
+                } finally {
+                    if (connection) connection.release();
+                }
+            });
             // הפעלת השרת
             const PORT = 3001;
             app.listen(PORT, () => {
