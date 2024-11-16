@@ -6,11 +6,22 @@
             const config = require('./config');
             const { validatePassword, validateEmail } = require('./validation');
 
+
+            const PORT = process.env.PORT || 3001;
             const app = express();
 
             // Middleware
-            app.use(cors());
+            app.use(cors({
+                origin: ['https://katz-abr.onrender.com', 'http://localhost:3000', 'http://localhost:3004'],
+                credentials: true
+            }));
             app.use(bodyParser.json());
+
+
+            // Route ברירת מחדל
+            app.get('/', (req, res) => {
+                res.json({ message: 'Server is running' });
+            });
 
             // יצירת pool של חיבורים
             const pool = mysql.createPool(config.db);
@@ -444,7 +455,6 @@
                 }
             });
             // הפעלת השרת
-            const PORT = 3001;
-            app.listen(PORT, () => {
+            app.listen(PORT, '0.0.0.0', () => {
                 console.log(`השרת פועל בפורט ${PORT}`);
             });
