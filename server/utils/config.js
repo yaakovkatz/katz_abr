@@ -1,14 +1,13 @@
 const config = {
     db: {
-        host: 'localhost',
-        user: 'app_user',
-        password: 'katz741258',
-        database: 'my_app_db',
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER || 'app_user',
+        password: process.env.DB_PASSWORD || 'katz741258',
+        database: process.env.DB_NAME || 'my_app_db',
         waitForConnections: true,
         connectionLimit: 10,
         queueLimit: 0
-    },
-    port: 3001
+    }
 };
 
 module.exports = config;
