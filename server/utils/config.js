@@ -1,12 +1,9 @@
 const config = {
     db: {
-        host: process.env.DB_HOST || 'localhost',
-        user: process.env.DB_USER || 'app_user',
-        password: process.env.DB_PASSWORD || 'katz741258',
-        database: process.env.DB_NAME || 'my_app_db',
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0
+        connectionString: process.env.DATABASE_URL || "postgresql://katz_user:[katz741258]@hardy-badger-4734.g8z.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full",
+        ssl: process.env.NODE_ENV === 'production'
+            ? { rejectUnauthorized: true }
+            : false
     }
 };
 
