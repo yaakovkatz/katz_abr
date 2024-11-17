@@ -12,10 +12,12 @@
 
             // Middleware
             app.use(cors({
-                origin: ['https://katz-abr.onrender.com', 'http://localhost:3000', 'http://localhost:3004'],
-                credentials: true
+                origin: ['https://katz-abr.onrender.com', 'http://localhost:3000', 'https://katz-abr-frontend.onrender.com'],
+                methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+                allowedHeaders: ['Content-Type', 'Authorization'],
+                credentials: true,
+                exposedHeaders: ['set-cookie']
             }));
-            app.use(bodyParser.json());
 
 
             // Route ברירת מחדל
