@@ -1,367 +1,460 @@
-const express = require('express');
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const config = require('./config');
-const { validatePassword, validateEmail } = require('./validation');
+            const express = require('express');
+            const mysql = require('mysql2/promise');
+            const bcrypt = require('bcrypt');
+            const bodyParser = require('body-parser');
+            const cors = require('cors');
+            const config = require('./config');
+            const { validatePassword, validateEmail } = require('./validation');
 
-const PORT = process.env.PORT || 3001;
-const app = express();
 
-app.use(cors({
-    origin: ['https://katz-abr.onrender.com', 'http://localhost:3000', 'https://katz-abr-frontend.onrender.com'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,
-    exposedHeaders: ['set-cookie']
-}));
+            const PORT = process.env.PORT || 3001;
+            const app = express();
 
-app.use(bodyParser.json());
+            // Middleware
+            app.use(cors({
+                origin: ['https://katz-abr.onrender.com', 'http://localhost:3000', 'http://localhost:3004'],
+                credentials: true
+            }));
+            app.use(bodyParser.json());
 
-app.get('/', (req, res) => {
-    res.json({ message: 'Server is running' });
-});
 
-const pool = new Pool(config.db);
-
-// הרשמה
-app.post('/register', async (req, res) => {
-    const { email, password } = req.body;
-
-    const emailErrors = validateEmail(email);
-    const passwordErrors = validatePassword(password);
-
-    if (emailErrors.length > 0 || passwordErrors.length > 0) {
-        return res.status(400).json({
-            errors: [...emailErrors, ...passwordErrors]
-        });
-    }
-
-    try {
-        const existingUser = await pool.query(
-            'SELECT id FROM users WHERE email = $1',
-            [email]
-        );
-
-        if (existingUser.rows.length > 0) {
-            return res.status(400).json({
-                errors: ['כתובת האימייל כבר קיימת במערכת']
+            // Route ברירת מחדל
+            app.get('/', (req, res) => {
+                res.json({ message: 'Server is running' });
             });
-        }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await pool.query(
-            'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email',
-            [email, hashedPassword]
-        );
+            // יצירת pool של חיבורים
+            const pool = mysql.createPool(config.db);
 
-        res.status(201).json({
-            message: 'משתמש נרשם בהצלחה',
-            user: result.rows[0]
-        });
+            // נתיב להרשמה
+            app.post('/register', async (req, res) => {
+                const { email, password } = req.body;
+                console.log('Registration attempt:', { email });
 
-    } catch (error) {
-        console.error('Registration error:', error);
-        res.status(500).json({ errors: ['שגיאה בהרשמה'] });
-    }
-});
+                // בדיקת תקינות
+                const emailErrors = validateEmail(email);
+                const passwordErrors = validatePassword(password);
 
-// התחברות
-app.post('/login', async (req, res) => {
-    const { email, password, rememberMe } = req.body;
+                if (emailErrors.length > 0 || passwordErrors.length > 0) {
+                    console.log('Validation errors:', { emailErrors, passwordErrors });
+                    return res.status(400).json({
+                        errors: [...emailErrors, ...passwordErrors]
+                    });
+                }
 
-    if (!email || !password) {
-        return res.status(400).json({
-            errors: ['נדרשים כתובת אימייל וסיסמה']
-        });
-    }
+                let connection;
+                try {
+                    connection = await pool.getConnection();
+                    console.log('Connected to database');
 
-    try {
-        const result = await pool.query(
-            'SELECT * FROM users WHERE email = $1',
-            [email]
-        );
+                    const [existingUsers] = await connection.execute(
+                        'SELECT * FROM users WHERE email = ?',
+                        [email]
+                    );
+                    console.log('Checked existing users:', { count: existingUsers.length });
 
-        if (result.rows.length === 0) {
-            return res.status(401).json({
-                errors: ['שם משתמש או סיסמה שגויים']
+                    if (existingUsers.length > 0) {
+                        return res.status(400).json({
+                            errors: ['כתובת האימייל כבר קיימת במערכת']
+                        });
+                    }
+
+                    const hashedPassword = await bcrypt.hash(password, 10);
+                    console.log('Password hashed');
+
+                    await connection.execute(
+                        'INSERT INTO users (email, password) VALUES (?, ?)',
+                        [email, hashedPassword]
+                    );
+                    console.log('User inserted successfully');
+
+                    res.status(201).json({ message: 'משתמש נרשם בהצלחה' });
+
+                } catch (error) {
+                    console.error('Detailed error:', error);
+                    res.status(501).json({ errors: ['שגיאה בהרשמה'] });
+                } finally {
+                    if (connection) connection.release();
+                }
             });
-        }
 
-        const user = result.rows[0];
-        const match = await bcrypt.compare(password, user.password);
+            // נתיב להתחברות
+            app.post('/login', async (req, res) => {
+                const { email, password, rememberMe } = req.body;
 
-        if (!match) {
-            return res.status(401).json({
-                errors: ['שם משתמש או סיסמה שגויים']
+                if (!email || !password) {
+                    return res.status(400).json({
+                        errors: ['נדרשים כתובת אימייל וסיסמה']
+                    });
+                }
+
+                let connection;
+                try {
+                    connection = await pool.getConnection();
+
+                    const [users] = await connection.execute(
+                        'SELECT * FROM users WHERE email = ?',
+                        [email]
+                    );
+
+                    if (users.length === 0) {
+                        return res.status(401).json({
+                            errors: ['שם משתמש או סיסמה שגויים']
+                        });
+                    }
+
+                    const match = await bcrypt.compare(password, users[0].password);
+                    if (!match) {
+                        return res.status(401).json({
+                            errors: ['שם משתמש או סיסמה שגויים']
+                        });
+                    }
+
+                    let rememberToken = null;
+                    if (rememberMe) {
+                        rememberToken = Math.random().toString(36).slice(-16);
+                        await connection.execute(
+                            'UPDATE users SET remember_token = ? WHERE id = ?',
+                            [rememberToken, users[0].id]
+                        );
+                    }
+
+                    res.status(200).json({
+                        message: 'התחברות בוצעה בהצלחה',
+                        user: {
+                            id: users[0].id,
+                            email: users[0].email,
+                            rememberToken
+                        }
+                    });
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(502).json({ errors: ['שגיאה בהתחברות'] });
+                } finally {
+                    if (connection) connection.release();
+                }
             });
-        }
 
-        let rememberToken = null;
-        if (rememberMe) {
-            rememberToken = Math.random().toString(36).slice(-16);
-            await pool.query(
-                'UPDATE users SET remember_token = $1 WHERE id = $2',
-                [rememberToken, user.id]
-            );
-        }
+            // נתיב לבדיקת טוקן "זכור אותי"
+            app.post('/check-remember-token', async (req, res) => {
+                const { token } = req.body;
 
-        res.status(200).json({
-            message: 'התחברות בוצעה בהצלחה',
-            user: {
-                id: user.id,
-                email: user.email,
-                rememberToken
-            }
-        });
+                if (!token) {
+                    return res.status(400).json({
+                        errors: ['טוקן לא נמצא']
+                    });
+                }
 
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ errors: ['שגיאה בהתחברות'] });
-    }
-});
+                let connection;
+                try {
+                    connection = await pool.getConnection();
 
-// בדיקת טוקן זכירה
-app.post('/check-remember-token', async (req, res) => {
-    const { token } = req.body;
+                    const [users] = await connection.execute(
+                        'SELECT id, email FROM users WHERE remember_token = ?',
+                        [token]
+                    );
 
-    if (!token) {
-        return res.status(400).json({ errors: ['טוקן לא נמצא'] });
-    }
+                    if (users.length === 0) {
+                        return res.status(401).json({
+                            errors: ['טוקן לא תקין']
+                        });
+                    }
 
-    try {
-        const result = await pool.query(
-            'SELECT id, email FROM users WHERE remember_token = $1',
-            [token]
-        );
+                    res.status(200).json({
+                        message: 'טוקן תקין',
+                        user: {
+                            id: users[0].id,
+                            email: users[0].email
+                        }
+                    });
 
-        if (result.rows.length === 0) {
-            return res.status(401).json({ errors: ['טוקן לא תקין'] });
-        }
-
-        res.json({
-            message: 'טוקן תקין',
-            user: result.rows[0]
-        });
-
-    } catch (error) {
-        console.error('Token check error:', error);
-        res.status(500).json({ errors: ['שגיאה בבדיקת הטוקן'] });
-    }
-});
-
-// שחזור סיסמה
-app.post('/forgot-password', async (req, res) => {
-    const { email } = req.body;
-
-    try {
-        const result = await pool.query(
-            'SELECT id FROM users WHERE email = $1',
-            [email]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({ errors: ['משתמש לא נמצא'] });
-        }
-
-        const resetToken = Math.random().toString(36).slice(-8);
-        const expires = new Date();
-        expires.setHours(expires.getHours() + 1);
-
-        await pool.query(
-            'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
-            [resetToken, expires, result.rows[0].id]
-        );
-
-        res.json({
-            message: 'קוד איפוס נשלח בהצלחה',
-            token: resetToken
-        });
-
-    } catch (error) {
-        console.error('Password reset error:', error);
-        res.status(500).json({ errors: ['שגיאה בתהליך שחזור הסיסמה'] });
-    }
-});
-
-// איפוס סיסמה
-app.post('/reset-password', async (req, res) => {
-    const { token, newPassword } = req.body;
-
-    try {
-        const result = await pool.query(
-            'SELECT id FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()',
-            [token]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(400).json({
-                errors: ['קוד איפוס לא תקין או שפג תוקפו']
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(503).json({ errors: ['שגיאה בבדיקת הטוקן'] });
+                } finally {
+                    if (connection) connection.release();
+                }
             });
-        }
 
-        const passwordErrors = validatePassword(newPassword);
-        if (passwordErrors.length > 0) {
-            return res.status(400).json({ errors: passwordErrors });
-        }
+            // נתיב לשחזור סיסמה
+            app.post('/forgot-password', async (req, res) => {
+                const { email } = req.body;
+                let connection;
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await pool.query(
-            'UPDATE users SET password = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2',
-            [hashedPassword, result.rows[0].id]
-        );
+                try {
+                    connection = await pool.getConnection();
 
-        res.json({ message: 'סיסמה עודכנה בהצלחה' });
+                    const [users] = await connection.execute(
+                        'SELECT * FROM users WHERE email = ?',
+                        [email]
+                    );
 
-    } catch (error) {
-        console.error('Password reset error:', error);
-        res.status(500).json({ errors: ['שגיאה בעדכון הסיסמה'] });
-    }
-});
+                    if (users.length === 0) {
+                        return res.status(419).json({
+                            errors: ['משתמש לא נמצא']
+                        });
+                    }
 
-// עדכון סיסמה
-app.post('/update-password', async (req, res) => {
-    const { userId, currentPassword, newPassword } = req.body;
+                    const resetToken = Math.random().toString(36).slice(-8);
+                    const expires = new Date();
+                    expires.setHours(expires.getHours() + 1);
 
-    try {
-        const result = await pool.query(
-            'SELECT * FROM users WHERE id = $1',
-            [userId]
-        );
+                    await connection.execute(
+                        'UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
+                        [resetToken, expires, users[0].id]
+                    );
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                errors: ['משתמש לא נמצא']
+                    res.json({
+                        message: 'קוד איפוס נשלח בהצלחה',
+                        token: resetToken
+                    });
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(504).json({ errors: ['שגיאה בתהליך שחזור הסיסמה'] });
+                } finally {
+                    if (connection) connection.release();
+                }
             });
-        }
 
-        const match = await bcrypt.compare(currentPassword, result.rows[0].password);
-        if (!match) {
-            return res.status(401).json({
-                errors: ['סיסמה נוכחית שגויה']
+            // נתיב לאיפוס סיסמה
+            app.post('/reset-password', async (req, res) => {
+                const { token, newPassword } = req.body;
+                let connection;
+
+                try {
+                    connection = await pool.getConnection();
+
+                    const [users] = await connection.execute(
+                        'SELECT * FROM users WHERE reset_token = ? AND reset_token_expires > NOW()',
+                        [token]
+                    );
+
+                    if (users.length === 0) {
+                        return res.status(400).json({
+                            errors: ['קוד איפוס לא תקין או שפג תוקפו']
+                        });
+                    }
+
+                    const passwordErrors = validatePassword(newPassword);
+                    if (passwordErrors.length > 0) {
+                        return res.status(400).json({ errors: passwordErrors });
+                    }
+
+                    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+                    await connection.execute(
+                        'UPDATE users SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
+                        [hashedPassword, users[0].id]
+                    );
+
+                    res.json({ message: 'סיסמה עודכנה בהצלחה' });
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(505).json({ errors: ['שגיאה בעדכון הסיסמה'] });
+                } finally {
+                    if (connection) connection.release();
+                }
             });
-        }
 
-        const passwordErrors = validatePassword(newPassword);
-        if (passwordErrors.length > 0) {
-            return res.status(400).json({ errors: passwordErrors });
-        }
+            // נתיב לעדכון סיסמה
+            app.post('/update-password', async (req, res) => {
+                const { userId, currentPassword, newPassword } = req.body;
+                let connection;
 
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await pool.query(
-            'UPDATE users SET password = $1 WHERE id = $2',
-            [hashedPassword, userId]
-        );
+                try {
+                    connection = await pool.getConnection();
 
-        res.json({ message: 'סיסמה עודכנה בהצלחה' });
+                    const [users] = await connection.execute(
+                        'SELECT * FROM users WHERE id = ?',
+                        [userId]
+                    );
 
-    } catch (error) {
-        console.error('Password update error:', error);
-        res.status(500).json({ errors: ['שגיאה בעדכון הסיסמה'] });
-    }
-});
+                    if (users.length === 0) {
+                        return res.status(420).json({
+                            errors: ['משתמש לא נמצא']
+                        });
+                    }
 
-// נתוני דשבורד
-app.get('/api/dashboard-data', async (req, res) => {
-    const { userId } = req.query;
+                    const match = await bcrypt.compare(currentPassword, users[0].password);
+                    if (!match) {
+                        return res.status(401).json({
+                            errors: ['סיסמה נוכחית שגויה']
+                        });
+                    }
 
-    try {
-        const result = await pool.query(
-            'SELECT * FROM dashboard_data WHERE user_id = $1',
-            [userId]
-        );
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Dashboard data fetch error:', error);
-        res.status(500).json({ errors: ['שגיאה בטעינת נתונים'] });
-    }
-});
+                    const passwordErrors = validatePassword(newPassword);
+                    if (passwordErrors.length > 0) {
+                        return res.status(400).json({ errors: passwordErrors });
+                    }
 
-// הוספת נתוני דשבורד
-app.post('/api/dashboard-data', async (req, res) => {
-    const { userId, name, email, phone, address, additionalInfo = null } = req.body;
+                    const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    if (!userId || !name || !email || !phone || !address) {
-        return res.status(400).json({
-            errors: ['כל השדות חובה למילוי']
-        });
-    }
+                    await connection.execute(
+                        'UPDATE users SET password = ? WHERE id = ?',
+                        [hashedPassword, userId]
+                    );
 
-    try {
-        const userExists = await pool.query(
-            'SELECT id FROM users WHERE id = $1',
-            [userId]
-        );
+                    res.json({ message: 'סיסמה עודכנה בהצלחה' });
 
-        if (userExists.rows.length === 0) {
-            return res.status(404).json({
-                errors: ['משתמש לא נמצא']
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(506).json({ errors: ['שגיאה בעדכון הסיסמה'] });
+                } finally {
+                    if (connection) connection.release();
+                }
             });
-        }
 
-        const result = await pool.query(
-            'INSERT INTO dashboard_data (user_id, name, email, phone, address, additional_info) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [userId, name, email, phone, address, additionalInfo]
-        );
 
-        res.status(201).json({
-            message: 'הנתונים נוספו בהצלחה',
-            data: result.rows[0]
-        });
+            app.get('/api/dashboard-data', async (req, res) => {
+                const { userId } = req.query;
+                let connection;
 
-    } catch (error) {
-        console.error('Dashboard data insert error:', error);
-        res.status(500).json({ errors: ['שגיאה בהוספת נתונים'] });
-    }
-});
-
-// מחיקת נתוני דשבורד
-app.delete('/api/dashboard-data/:id', async (req, res) => {
-    const { id } = req.params;
-    const { userId } = req.query;
-
-    try {
-        await pool.query(
-            'DELETE FROM dashboard_data WHERE id = $1 AND user_id = $2',
-            [id, userId]
-        );
-        res.json({ message: 'נמחק בהצלחה' });
-    } catch (error) {
-        console.error('Dashboard data delete error:', error);
-        res.status(500).json({ errors: ['שגיאה במחיקת נתונים'] });
-    }
-});
-
-// עדכון נתוני דשבורד
-app.put('/api/dashboard-data/:id', async (req, res) => {
-    const { id } = req.params;
-    const { name, email, phone, address, userId } = req.body;
-
-    try {
-        const record = await pool.query(
-            'SELECT * FROM dashboard_data WHERE id = $1 AND user_id = $2',
-            [id, userId]
-        );
-
-        if (record.rows.length === 0) {
-            return res.status(403).json({
-                errors: ['אין הרשאה לעדכן רשומה זו']
+                try {
+                    connection = await pool.getConnection();
+                    const [rows] = await connection.execute(
+                        'SELECT * FROM dashboard_data WHERE user_id = ?',
+                        [userId]
+                    );
+                    res.json(rows);
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(507).json({ errors: ['שגיאה בטעינת נתונים'] });
+                } finally {
+                    if (connection) connection.release();
+                }
             });
-        }
 
-        const result = await pool.query(
-            'UPDATE dashboard_data SET name = $1, email = $2, phone = $3, address = $4 WHERE id = $5 AND user_id = $6 RETURNING *',
-            [name, email, phone, address, id, userId]
-        );
+            app.post('/api/dashboard-data', async (req, res) => {
+                // לוג של המידע שמגיע
+                console.log('Received request body:', req.body);
 
-        res.json(result.rows[0]);
-    } catch (error) {
-        console.error('Dashboard data update error:', error);
-        res.status(500).json({ errors: ['שגיאה בעדכון נתונים'] });
-    }
-});
+                const { userId, name, email, phone, address, additionalInfo = null } = req.body;
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`השרת פועל בפורט ${PORT}`);
-});
+                // בדיקת תקינות
+                if (!userId || !name || !email || !phone || !address) {
+                    console.log('Missing required fields:', { userId, name, email, phone, address });
+                    return res.status(401).json({
+                        errors: ['כל השדות חובה למילוי']
+                    });
+                }
+
+                if (!userId) {
+                    console.log('Missing userId');
+                    return res.status(400).json({
+                        errors: ['חסר מזהה משתמש']
+                    });
+                }
+
+                let connection;
+                try {
+                    connection = await pool.getConnection();
+                    console.log('Database connection established');
+
+                    // בדיקה שהמשתמש קיים
+                    const [userExists] = await connection.execute(
+                        'SELECT id FROM users WHERE id = ?',
+                        [userId]
+                    );
+
+                    if (userExists.length === 0) {
+                        console.log('User not found for ID:', userId);
+                        return res.status(450).json({
+                            errors: ['משתמש לא נמצא']
+                        });
+                    }
+
+                    console.log('Found user, proceeding with insert');
+
+                    // הכנסת הנתונים
+                    const [result] = await connection.execute(
+                        'INSERT INTO dashboard_data (user_id, name, email, phone, address, additional_info) VALUES (?, ?, ?, ?, ?, ?)',
+                        [userId, name, email, phone, address, additionalInfo]
+                    );
+
+                    console.log('Insert successful:', result);
+
+                    // קבלת הנתונים שנשמרו
+                    const [newRow] = await connection.execute(
+                        'SELECT * FROM dashboard_data WHERE id = ?',
+                        [result.insertId]
+                    );
+
+                    res.status(201).json({
+                        message: 'הנתונים נוספו בהצלחה',
+                        data: newRow[0]
+                    });
+                } catch (error) {
+                    console.error('Detailed error:', error);
+                    res.status(508).json({ errors: ['שגיאה בהוספת נתונים'] });
+                } finally {
+                    if (connection) connection.release();
+                }
+            });
+            app.delete('/api/dashboard-data/:id', async (req, res) => {
+                const { id } = req.params;
+                const { userId } = req.query;
+                let connection;
+
+                try {
+                    connection = await pool.getConnection();
+                    await connection.execute(
+                        'DELETE FROM dashboard_data WHERE id = ? AND user_id = ?',
+                        [id, userId]
+                    );
+                    res.json({ message: 'נמחק בהצלחה' });
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(509).json({ errors: ['שגיאה במחיקת נתונים'] });
+                } finally {
+                    if (connection) connection.release();
+                }
+            });
+
+
+            app.put('/api/dashboard-data/:id', async (req, res) => {
+                const { id } = req.params;
+                const { name, email, phone, address, userId } = req.body;
+                let connection;
+
+                try {
+                    connection = await pool.getConnection();
+
+                    // בדיקה שהרשומה שייכת למשתמש
+                    const [record] = await connection.execute(
+                        'SELECT * FROM dashboard_data WHERE id = ? AND user_id = ?',
+                        [id, userId]
+                    );
+
+                    if (record.length === 0) {
+                        return res.status(403).json({
+                            errors: ['אין הרשאה לעדכן רשומה זו']
+                        });
+                    }
+
+                    // עדכון הנתונים
+                    await connection.execute(
+                        'UPDATE dashboard_data SET name = ?, email = ?, phone = ?, address = ? WHERE id = ? AND user_id = ?',
+                        [name, email, phone, address, id, userId]
+                    );
+
+                    // קבלת הנתונים המעודכנים
+                    const [updatedRecord] = await connection.execute(
+                        'SELECT * FROM dashboard_data WHERE id = ?',
+                        [id]
+                    );
+
+                    res.json(updatedRecord[0]);
+                } catch (error) {
+                    console.error('Error:', error);
+                    res.status(500).json({ errors: ['שגיאה בעדכון נתונים'] });
+                } finally {
+                    if (connection) connection.release();
+                }
+            });
+            // הפעלת השרת
+            app.listen(PORT, '0.0.0.0', () => {
+                console.log(`השרת פועל בפורט ${PORT}`);
+            });
