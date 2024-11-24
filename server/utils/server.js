@@ -9,14 +9,29 @@ const { validatePassword, validateEmail } = require('./validation');
 const PORT = process.env.PORT || 3001;
 const app = express();
 
+
+app.enable('trust proxy');
+
+
 // Middleware
 app.use(cors({
-    origin: ['https://katz-abr.onrender.com', 'http://localhost:3000', 'http://localhost:3004'],
+    origin: '*',  // זמני, לצורך בדיקה
     credentials: true
 }));
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
+
+
+app.use((req, res, next) => {
+    console.log('-------------------');
+    console.log('Request URL:', req.url);
+    console.log('Request Method:', req.method);
+    console.log('Request Headers:', req.headers);
+    console.log('Request Body:', req.body);
+    console.log('-------------------');
+    next();
+});
 
 // Debugging middleware
 app.use((req, res, next) => {
@@ -375,7 +390,7 @@ app.put('/api/dashboard-data/:id', async (req, res) => {
     }
 });
 
-const port = process.env.PORT || 3001;
-app.listen(port, '0.0.0.0', () => {
+const port = process.env.PORT || 10000;  // שינוי הפורט ברירת המחדל ל-10000
+app.listen(port, () => {                 // הסרנו את ה-0.0.0.0
     console.log(`Server is running on port ${port}`);
 });
