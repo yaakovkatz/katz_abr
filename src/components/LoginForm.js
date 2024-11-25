@@ -1,6 +1,11 @@
+// frontend/LoginForm.js
 import React, { useState, useEffect } from 'react';
 import { validatePassword, validateEmail } from '../validation';
 import { Link, useNavigate } from 'react-router-dom';
+
+const API_URL = process.env.NODE_ENV === 'development'
+    ? 'http://localhost:10000'
+    : 'https://your-production-url.com';
 
 const LoginForm = () => {
     const [email, setEmail] = useState('');
@@ -9,84 +14,86 @@ const LoginForm = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [showPassword, setShowPassword] = useState(false);
     const [rememberMe, setRememberMe] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     const navigate = useNavigate();
 
-    // בדיקת נתיב test בטעינה
     useEffect(() => {
         const testConnection = async () => {
             try {
-                const response = await fetch('https://katz-abr-backend.onrender.com/test');
+                const response = await fetch(`${API_URL}/test`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
                 const data = await response.json();
-                console.log('Test endpoint response:', data);
+                console.log('Server connection test:', data);
             } catch (error) {
-                console.error('Test endpoint error:', error);
+                console.error('Server connection test failed:', error);
+                setErrors(['בעיית תקשורת עם השרת']);
             }
         };
-
         testConnection();
     }, []);
 
-    // בדיקת טוקן "זכור אותי" בטעינת הדף
     useEffect(() => {
         const checkRememberToken = async () => {
             const token = localStorage.getItem('rememberToken');
-            if (token) {
-                try {
-                    console.log('Checking remember token:', token);
-                    const response = await fetch('https://katz-abr-backend.onrender.com/check-remember-token', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({ token }),
-                    });
+            if (!token) return;
 
-                    console.log('Remember token response status:', response.status);
-                    const textResponse = await response.text();
-                    console.log('Raw remember token response:', textResponse);
+            try {
+                const response = await fetch(`${API_URL}/check-remember-token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ token })
+                });
 
-                    try {
-                        const data = JSON.parse(textResponse);
-                        console.log('Parsed remember token response:', data);
-                        if (!response.ok) {
-                            localStorage.removeItem('rememberToken');
-                        }
-                    } catch (e) {
-                        console.error('Failed to parse remember token response:', e);
-                        localStorage.removeItem('rememberToken');
-                    }
-                } catch (error) {
-                    console.error('Error checking remember token:', error);
+                if (!response.ok) {
+                    throw new Error('Invalid token');
                 }
+
+                const data = await response.json();
+                if (data.user) {
+                    navigate('/users');
+                }
+            } catch (error) {
+                localStorage.removeItem('rememberToken');
+                console.error('Token verification failed:', error);
             }
         };
-
         checkRememberToken();
-    }, []);
+    }, [navigate]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setErrors([]);
-
-        console.log('Starting submission:', { email, password, isLogin });
-
-        if (!isLogin) {
-            const passwordErrors = validatePassword(password);
-            const emailErrors = validateEmail(email);
-
-            if (passwordErrors.length > 0 || emailErrors.length > 0) {
-                setErrors([...passwordErrors, ...emailErrors]);
-                return;
-            }
-        }
+        setIsLoading(true);
 
         try {
-            const url = `https://katz-abr-backend.onrender.com${isLogin ? '/login' : '/register'}`;
-            console.log('Sending request to:', url);
+            // Validation for registration
+            if (!isLogin) {
+                const validationErrors = [
+                    ...validatePassword(password),
+                    ...validateEmail(email)
+                ];
+                if (validationErrors.length) {
+                    setErrors(validationErrors);
+                    setIsLoading(false);
+                    return;
+                }
+            }
 
-            const response = await fetch(url, {
+            const response = await fetch(`${API_URL}/${isLogin ? 'login' : 'register'}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -95,53 +102,30 @@ const LoginForm = () => {
                 body: JSON.stringify({
                     email,
                     password,
-                    rememberMe: isLogin ? rememberMe : false,
-                }),
+                    rememberMe
+                })
             });
 
-            console.log('Response status:', response.status);
+            const data = await response.json();
 
-            const textResponse = await response.text();
-            console.log('Raw response:', textResponse);
-
-            let data;
-            try {
-                data = JSON.parse(textResponse);
-            } catch (e) {
-                console.error('Failed to parse response:', e);
-                throw new Error('Invalid JSON response from server');
+            if (!response.ok) {
+                throw new Error(data.errors?.[0] || 'שגיאה בתהליך ההתחברות');
             }
 
-            console.log('Parsed response:', data);
-            console.log('Server response:', data);
-            console.log('Errors:', data.errors || [data.message]);
-
-            if (response.ok) {
-                if (data.user) {
-                    console.log('Saving user data:', data.user);
-                    localStorage.setItem('userId', data.user.id);
-
-                    if (data.user.rememberToken) {
-                        localStorage.setItem('rememberToken', data.user.rememberToken);
-                    }
-
-                    console.log('After saving - userId from localStorage:', localStorage.getItem('userId'));
+            if (data.user) {
+                localStorage.setItem('userId', data.user.id);
+                if (data.user.rememberToken) {
+                    localStorage.setItem('rememberToken', data.user.rememberToken);
                 }
-
-                alert(isLogin ? 'התחברות בוצעה בהצלחה!' : 'הרשמה בוצעה בהצלחה!');
-                setEmail('');
-                setPassword('');
-                setErrors([]);
-
-                if (isLogin) {
-                    navigate('/users');
-                }
+                navigate('/users');
             } else {
-                setErrors(data.errors || [data.message]);
+                throw new Error('מידע משתמש חסר בתשובת השרת');
             }
         } catch (error) {
-            console.error('Submission error:', error);
-            setErrors(isLogin ? ['שגיאה בהתחברות'] : ['שגיאה בהרשמה']);
+            console.error('Authentication error:', error);
+            setErrors([error.message || 'שגיאה בתהליך ההתחברות']);
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -150,7 +134,7 @@ const LoginForm = () => {
             <div className="row justify-content-center">
                 <div className="col-md-6">
                     <h1 className="text-center mb-4">{isLogin ? 'התחברות' : 'הרשמה'}</h1>
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={handleSubmit} className="needs-validation">
                         <div className="mb-3">
                             <label htmlFor="email" className="form-label">כתובת אימייל</label>
                             <input
@@ -160,8 +144,10 @@ const LoginForm = () => {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
+                                disabled={isLoading}
                             />
                         </div>
+
                         <div className="mb-3">
                             <label htmlFor="password" className="form-label">סיסמה</label>
                             <div className="input-group">
@@ -172,14 +158,15 @@ const LoginForm = () => {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
+                                    disabled={isLoading}
                                 />
                                 <button
                                     type="button"
                                     className="btn btn-outline-secondary"
                                     onClick={() => setShowPassword(!showPassword)}
+                                    disabled={isLoading}
                                 >
                                     <i className={`fa fa-eye${showPassword ? '-slash' : ''}`}></i>
-                                    {showPassword ? '' : '️'}
                                 </button>
                             </div>
 
@@ -204,6 +191,7 @@ const LoginForm = () => {
                                     id="rememberMe"
                                     checked={rememberMe}
                                     onChange={(e) => setRememberMe(e.target.checked)}
+                                    disabled={isLoading}
                                 />
                                 <label className="form-check-label" htmlFor="rememberMe">
                                     זכור אותי
@@ -220,10 +208,19 @@ const LoginForm = () => {
                                 </ul>
                             </div>
                         )}
-                        <button type="submit" className="btn btn-primary w-100">
+
+                        <button
+                            type="submit"
+                            className="btn btn-primary w-100"
+                            disabled={isLoading}
+                        >
+                            {isLoading ? (
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            ) : null}
                             {isLogin ? 'התחבר' : 'הירשם'}
                         </button>
                     </form>
+
                     <div className="mt-3 text-center">
                         <button
                             onClick={() => {
@@ -234,6 +231,7 @@ const LoginForm = () => {
                                 setRememberMe(false);
                             }}
                             className="btn btn-link"
+                            disabled={isLoading}
                         >
                             {isLogin ? 'עבור להרשמה' : 'עבור להתחברות'}
                         </button>
