@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 const API_URL = process.env.NODE_ENV === 'development'
     ? 'http://localhost:10000'
-    : 'https://your-production-url.com';
+    : 'https://katz-abr-backend.onrender.com';
 
 const LoginForm = () => {
     const [email, setEmail] = useState('');
