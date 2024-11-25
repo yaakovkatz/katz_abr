@@ -11,17 +11,15 @@ const app = express();
 // Basic Middleware
 app.enable('trust proxy');
 
-// CORS configuration
 app.use(cors({
     origin: [
         'http://localhost:3000',
-        'http://localhost:3001',
-        'http://localhost:10000',
-        'https://katz-abr.onrender.com',     // הדומיין של הקליינט ברנדר
-        'https://katz-abr-api.onrender.com'  // הדומיין של ה-API ברנדר
+        'https://katz-abr.onrender.com'  // הדומיין של הפרונט ברנדר
     ],
     credentials: true
 }));
+
+
 
 // Parsing middleware
 app.use(express.json());
