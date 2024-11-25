@@ -13,7 +13,13 @@ app.enable('trust proxy');
 
 // CORS configuration
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:10000'],
+    origin: [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:10000',
+        'https://katz-abr.onrender.com',     // הדומיין של הקליינט ברנדר
+        'https://katz-abr-api.onrender.com'  // הדומיין של ה-API ברנדר
+    ],
     credentials: true
 }));
 
