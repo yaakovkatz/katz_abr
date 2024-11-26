@@ -14,11 +14,11 @@ app.enable('trust proxy');
 app.use(cors({
     origin: [
         'http://localhost:3000',
-        'https://katz-abr.onrender.com'  // הדומיין של הפרונט ברנדר
+        'https://katz-abr.onrender.com',  // הדומיין של הפרונט ברנדר
+        'https://katz-abr-backend.onrender.com'  // הדומיין של הבקאנד ברנדר
     ],
     credentials: true
 }));
-
 
 
 // Parsing middleware
