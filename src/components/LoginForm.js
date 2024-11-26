@@ -3,9 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { validatePassword, validateEmail } from '../validation';
 import { Link, useNavigate } from 'react-router-dom';
 
-const API_URL = process.env.NODE_ENV === 'development'
-    ? 'http://localhost:10000'
-    : 'https://katz-abr-backend.onrender.com';
+
+
+const API_URL = 'https://katz-abr-backend.onrender.com';
 
 
 
