@@ -12,13 +12,20 @@ const app = express();
 app.enable('trust proxy');
 
 app.use(cors({
-    origin: [
-        'http://localhost:3000',
-        'https://katz-abr.onrender.com',  // הדומיין של הפרונט ברנדר
-        'https://katz-abr-backend.onrender.com'  // הדומיין של הבקאנד ברנדר
-    ],
+    origin: function(origin, callback) {
+        // מאפשר גישה מכל פורט של localhost וגם מ-render
+        if (!origin
+            || origin.match(/http:\/\/localhost:[0-9]+/)
+            || origin === 'https://katz-abr.onrender.com'
+            || origin === 'https://katz-abr-backend.onrender.com') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
+
 
 
 // Parsing middleware

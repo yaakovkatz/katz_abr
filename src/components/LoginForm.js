@@ -1,25 +1,33 @@
-// frontend/LoginForm.js
+
+// יבוא ספריות וקומפוננטות
 import React, { useState, useEffect } from 'react';
 import { validatePassword, validateEmail } from '../validation';
 import { Link, useNavigate } from 'react-router-dom';
 
-
-
+// קבועים וקונפיגורציה
 const API_URL = 'https://katz-abr-backend.onrender.com';
 
 
-
 const LoginForm = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [errors, setErrors] = useState([]);
-    const [isLogin, setIsLogin] = useState(true);
-    const [showPassword, setShowPassword] = useState(false);
-    const [rememberMe, setRememberMe] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
+    // ניהול סטייט
+    const [formData, setFormData] = useState({
+        email: '',
+        password: '',
+        rememberMe: false,
+        showPassword: false,
+        isLogin: true, // true = התחברות, false = הרשמה
+    });
+
+    const [uiState, setUiState] = useState({
+        errors: [],
+        isLoading: false,
+    });
 
     const navigate = useNavigate();
 
+    // אפקטים והתחברות לשרת
+
+    // בדיקת חיבור לשרת בטעינה ראשונית
     useEffect(() => {
         const testConnection = async () => {
             try {
@@ -39,12 +47,16 @@ const LoginForm = () => {
                 console.log('Server connection test:', data);
             } catch (error) {
                 console.error('Server connection test failed:', error);
-                setErrors(['בעיית תקשורת עם השרת']);
+                setUiState(prev => ({
+                    ...prev,
+                    errors: ['בעיית תקשורת עם השרת']
+                }));
             }
         };
         testConnection();
     }, []);
 
+    // בדיקת טוקן "זכור אותי" בטעינה
     useEffect(() => {
         const checkRememberToken = async () => {
             const token = localStorage.getItem('rememberToken');
@@ -76,35 +88,62 @@ const LoginForm = () => {
         checkRememberToken();
     }, [navigate]);
 
+    // פונקציות עזר
+
+    // טיפול בשינויים בטופס
+    const handleInputChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
+    };
+
+    // החלפה בין מצב התחברות להרשמה
+    const toggleAuthMode = () => {
+        setFormData(prev => ({
+            ...prev,
+            isLogin: !prev.isLogin,
+            password: '',
+            showPassword: false,
+            rememberMe: false
+        }));
+        setUiState(prev => ({ ...prev, errors: [] }));
+    };
+
+    // שליחת הטופס
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setErrors([]);
-        setIsLoading(true);
+        setUiState(prev => ({ ...prev, errors: [], isLoading: true }));
 
         try {
-            // Validation for registration
-            if (!isLogin) {
+            // וולידציה להרשמה
+            if (!formData.isLogin) {
                 const validationErrors = [
-                    ...validatePassword(password),
-                    ...validateEmail(email)
+                    ...validatePassword(formData.password),
+                    ...validateEmail(formData.email)
                 ];
                 if (validationErrors.length) {
-                    setErrors(validationErrors);
-                    setIsLoading(false);
+                    setUiState(prev => ({
+                        ...prev,
+                        errors: validationErrors,
+                        isLoading: false
+                    }));
                     return;
                 }
             }
 
-            const response = await fetch(`${API_URL}/${isLogin ? 'login' : 'register'}`, {
+            // שליחת בקשה לשרת
+            const response = await fetch(`${API_URL}/${formData.isLogin ? 'login' : 'register'}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({
-                    email,
-                    password,
-                    rememberMe
+                    email: formData.email,
+                    password: formData.password,
+                    rememberMe: formData.rememberMe
                 })
             });
 
@@ -125,75 +164,99 @@ const LoginForm = () => {
             }
         } catch (error) {
             console.error('Authentication error:', error);
-            setErrors([error.message || 'שגיאה בתהליך ההתחברות']);
+            setUiState(prev => ({
+                ...prev,
+                errors: [error.message || 'שגיאה בתהליך ההתחברות']
+            }));
         } finally {
-            setIsLoading(false);
+            setUiState(prev => ({ ...prev, isLoading: false }));
         }
     };
 
+    // רינדור הטופס
     return (
         <div className="container mt-5">
             <div className="row justify-content-center">
                 <div className="col-md-6">
-                    <h1 className="text-center mb-4">{isLogin ? 'התחברות' : 'הרשמה'}</h1>
+                    <h1 className="text-center mb-4">
+                        {formData.isLogin ? 'התחברות' : 'הרשמה'}
+                    </h1>
+
                     <form onSubmit={handleSubmit} className="needs-validation">
+                        {/* שדה אימייל */}
                         <div className="mb-3">
-                            <label htmlFor="email" className="form-label">כתובת אימייל</label>
+                            <label htmlFor="email" className="form-label">
+                                כתובת אימייל
+                            </label>
                             <input
                                 type="email"
                                 className="form-control"
                                 id="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                name="email"
+                                value={formData.email}
+                                onChange={handleInputChange}
                                 required
-                                disabled={isLoading}
+                                disabled={uiState.isLoading}
                             />
                         </div>
 
+                        {/* שדה סיסמה */}
                         <div className="mb-3">
-                            <label htmlFor="password" className="form-label">סיסמה</label>
+                            <label htmlFor="password" className="form-label">
+                                סיסמה
+                            </label>
                             <div className="input-group">
                                 <input
-                                    type={showPassword ? "text" : "password"}
+                                    type={formData.showPassword ? "text" : "password"}
                                     className="form-control"
                                     id="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
+                                    name="password"
+                                    value={formData.password}
+                                    onChange={handleInputChange}
                                     required
-                                    disabled={isLoading}
+                                    disabled={uiState.isLoading}
                                 />
                                 <button
                                     type="button"
                                     className="btn btn-outline-secondary"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    disabled={isLoading}
+                                    onClick={() => setFormData(prev => ({
+                                        ...prev,
+                                        showPassword: !prev.showPassword
+                                    }))}
+                                    disabled={uiState.isLoading}
                                 >
-                                    <i className={`fa fa-eye${showPassword ? '-slash' : ''}`}></i>
+                                    <i className={`fa fa-eye${formData.showPassword ? '-slash' : ''}`}></i>
                                 </button>
                             </div>
 
-                            {isLogin && (
+                            {/* קישור לשחזור סיסמה במצב התחברות */}
+                            {formData.isLogin && (
                                 <div className="mt-2">
-                                    <Link to="/forgot-password" className="text-primary">שכחת סיסמה?</Link>
+                                    <Link to="/forgot-password" className="text-primary">
+                                        שכחת סיסמה?
+                                    </Link>
                                 </div>
                             )}
 
-                            {!isLogin && (
+                            {/* הנחיות לסיסמה במצב הרשמה */}
+                            {!formData.isLogin && (
                                 <small className="text-muted">
                                     הסיסמה חייבת להכיל לפחות 8 תווים, אות גדולה, אות קטנה, מספר ותו מיוחד
                                 </small>
                             )}
                         </div>
 
-                        {isLogin && (
+                        {/* תיבת סימון "זכור אותי" במצב התחברות */}
+                        {formData.isLogin && (
                             <div className="mb-3 form-check">
                                 <input
                                     type="checkbox"
                                     className="form-check-input"
                                     id="rememberMe"
-                                    checked={rememberMe}
-                                    onChange={(e) => setRememberMe(e.target.checked)}
-                                    disabled={isLoading}
+                                    name="rememberMe"
+                                    checked={formData.rememberMe}
+                                    onChange={handleInputChange}
+                                    disabled={uiState.isLoading}
                                 />
                                 <label className="form-check-label" htmlFor="rememberMe">
                                     זכור אותי
@@ -201,41 +264,42 @@ const LoginForm = () => {
                             </div>
                         )}
 
-                        {errors.length > 0 && (
+                        {/* הצגת שגיאות */}
+                        {uiState.errors.length > 0 && (
                             <div className="alert alert-danger">
                                 <ul className="mb-0">
-                                    {errors.map((error, index) => (
+                                    {uiState.errors.map((error, index) => (
                                         <li key={index}>{error}</li>
                                     ))}
                                 </ul>
                             </div>
                         )}
 
+                        {/* כפתור שליחה */}
                         <button
                             type="submit"
                             className="btn btn-primary w-100"
-                            disabled={isLoading}
+                            disabled={uiState.isLoading}
                         >
-                            {isLoading ? (
-                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                            ) : null}
-                            {isLogin ? 'התחבר' : 'הירשם'}
+                            {uiState.isLoading && (
+                                <span
+                                    className="spinner-border spinner-border-sm me-2"
+                                    role="status"
+                                    aria-hidden="true"
+                                />
+                            )}
+                            {formData.isLogin ? 'התחבר' : 'הירשם'}
                         </button>
                     </form>
 
+                    {/* כפתור החלפה בין התחברות להרשמה */}
                     <div className="mt-3 text-center">
                         <button
-                            onClick={() => {
-                                setIsLogin(!isLogin);
-                                setErrors([]);
-                                setPassword('');
-                                setShowPassword(false);
-                                setRememberMe(false);
-                            }}
+                            onClick={toggleAuthMode}
                             className="btn btn-link"
-                            disabled={isLoading}
+                            disabled={uiState.isLoading}
                         >
-                            {isLogin ? 'עבור להרשמה' : 'עבור להתחברות'}
+                            {formData.isLogin ? 'עבור להרשמה' : 'עבור להתחברות'}
                         </button>
                     </div>
                 </div>
