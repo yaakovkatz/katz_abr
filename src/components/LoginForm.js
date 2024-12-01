@@ -1,4 +1,3 @@
-
 // יבוא ספריות וקומפוננטות
 import React, { useState, useEffect } from 'react';
 import { validatePassword, validateEmail } from '../validation';

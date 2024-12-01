@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-
-axios.defaults.baseURL = 'http://localhost:3001';  // תוסיף את זה כאן
-
+axios.defaults.baseURL = 'http://localhost:10000';
 
 const UserTable = ({ showModal, setShowModal, userId }) => {
-    console.log('UserTable received userId:', userId);  // הוסף את זה
-
     // ניהול מצב הטופס
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');

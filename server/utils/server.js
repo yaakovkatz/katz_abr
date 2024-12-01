@@ -185,6 +185,44 @@ app.post('/check-remember-token', async (req, res) => {
     }
 });
 
+
+// הוסף את הנתיבים החדשים כאן \/
+app.get('/api/dashboard-data', async (req, res) => {
+    const { userId } = req.query;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM dashboard_data WHERE user_id = $1',
+            [userId]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+        res.status(500).json({ error: 'שגיאה בטעינת הנתונים' });
+    }
+});
+
+app.post('/api/dashboard-data', async (req, res) => {
+    console.log('התקבלה בקשה להוספת נתונים:', req.body);  // לוג חדש
+
+    const { userId, name, email, phone, address } = req.body;
+
+    // בדיקה שכל השדות קיימים
+    console.log('ערכי השדות:', { userId, name, email, phone, address });  // לוג חדש
+
+    try {
+        const result = await pool.query(
+            'INSERT INTO dashboard_data (user_id, name, email, phone, address) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [userId, name, email, phone, address]
+        );
+        console.log('הנתונים נוספו בהצלחה:', result.rows[0]);  // לוג חדש
+        res.status(201).json(result.rows[0]);
+    } catch (error) {
+        console.error('שגיאה בהוספת נתונים לבסיס הנתונים:', error);  // לוג משופר
+        res.status(500).json({ error: 'שגיאה בשמירת הנתונים' });
+    }
+});
+// סוף הנתיבים החדשים /\
+
 // Error handler
 app.use((err, req, res, next) => {
     console.error(err.stack);
