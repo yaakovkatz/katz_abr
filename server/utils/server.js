@@ -47,9 +47,13 @@ pool.query('SELECT NOW()', (err, res) => {
 
 // Test route
 app.get('/test', (req, res) => {
-    res.json({ message: 'Server is working' });
+    console.log('Test endpoint was accessed!');
+    res.json({
+        message: 'Server is working',
+        timestamp: new Date().toISOString(),
+        env: process.env.NODE_ENV || 'development'
+    });
 });
-
 // Routes
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
