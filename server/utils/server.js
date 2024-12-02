@@ -1,5 +1,5 @@
 const express = require('express');
-const { Pool } = require('pg');
+const mysql = require('mysql2/promise');  // שינוי כאן
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -13,7 +13,6 @@ app.enable('trust proxy');
 
 app.use(cors({
     origin: function(origin, callback) {
-        // מאפשר גישה מכל פורט של localhost וגם מ-render
         if (!origin
             || origin.match(/http:\/\/localhost:[0-9]+/)
             || origin === 'https://katz-abr.onrender.com'
@@ -26,41 +25,37 @@ app.use(cors({
     credentials: true
 }));
 
-
-
 // Parsing middleware
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Create database pool
-const pool = new Pool(config.db);
+// Create MySQL pool instead of PostgreSQL pool
+const pool = mysql.createPool(config.db);
 
 // Test database connection
-pool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-        console.error('Database connection error:', err);
-    } else {
+async function testConnection() {
+    try {
+        const connection = await pool.getConnection();
         console.log('Database connected successfully');
+        connection.release();
+    } catch (err) {
+        console.error('Database connection error:', err);
     }
-});
+}
+testConnection();
 
 // Test route
 app.get('/test', (req, res) => {
-    console.log('Test endpoint was accessed!');
-    res.json({
-        message: 'Server is working',
-        timestamp: new Date().toISOString(),
-        env: process.env.NODE_ENV || 'development'
-    });
+    res.json({ message: 'Server is working' });
 });
+
 // Routes
 app.post('/register', async (req, res) => {
     const { email, password } = req.body;
     console.log('Registration attempt:', { email });
 
     try {
-        // Validation
         const emailErrors = validateEmail(email);
         const passwordErrors = validatePassword(password);
 
@@ -71,27 +66,29 @@ app.post('/register', async (req, res) => {
         }
 
         // Check if user exists
-        const existingUser = await pool.query(
-            'SELECT id FROM users WHERE email = $1',
+        const [existingUsers] = await pool.query(
+            'SELECT id FROM users WHERE email = ?',
             [email]
         );
 
-        if (existingUser.rows.length > 0) {
+        if (existingUsers.length > 0) {
             return res.status(400).json({
                 errors: ['כתובת האימייל כבר קיימת במערכת']
             });
         }
 
-        // Create user
         const hashedPassword = await bcrypt.hash(password, 10);
-        const result = await pool.query(
-            'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email',
+        const [result] = await pool.query(
+            'INSERT INTO users (email, password) VALUES (?, ?)',
             [email, hashedPassword]
         );
 
         res.status(201).json({
             message: 'משתמש נרשם בהצלחה',
-            user: result.rows[0]
+            user: {
+                id: result.insertId,
+                email
+            }
         });
 
     } catch (error) {
@@ -106,20 +103,18 @@ app.post('/login', async (req, res) => {
     const { email, password, rememberMe } = req.body;
 
     try {
-        // Find user
-        const result = await pool.query(
-            'SELECT * FROM users WHERE email = $1',
+        const [users] = await pool.query(
+            'SELECT * FROM users WHERE email = ?',
             [email]
         );
 
-        if (result.rows.length === 0) {
+        if (users.length === 0) {
             return res.status(401).json({
                 errors: ['שם משתמש או סיסמה שגויים']
             });
         }
 
-        // Check password
-        const user = result.rows[0];
+        const user = users[0];
         const match = await bcrypt.compare(password, user.password);
 
         if (!match) {
@@ -128,12 +123,11 @@ app.post('/login', async (req, res) => {
             });
         }
 
-        // Handle remember me token
         let rememberToken = null;
         if (rememberMe) {
             rememberToken = Math.random().toString(36).slice(-16);
             await pool.query(
-                'UPDATE users SET remember_token = $1 WHERE id = $2',
+                'UPDATE users SET remember_token = ? WHERE id = ?',
                 [rememberToken, user.id]
             );
         }
@@ -165,12 +159,12 @@ app.post('/check-remember-token', async (req, res) => {
             });
         }
 
-        const result = await pool.query(
-            'SELECT id, email FROM users WHERE remember_token = $1',
+        const [users] = await pool.query(
+            'SELECT id, email FROM users WHERE remember_token = ?',
             [token]
         );
 
-        if (result.rows.length === 0) {
+        if (users.length === 0) {
             return res.status(401).json({
                 errors: ['טוקן לא תקין']
             });
@@ -178,7 +172,7 @@ app.post('/check-remember-token', async (req, res) => {
 
         res.json({
             message: 'טוקן תקין',
-            user: result.rows[0]
+            user: users[0]
         });
 
     } catch (error) {
@@ -189,16 +183,15 @@ app.post('/check-remember-token', async (req, res) => {
     }
 });
 
-
-// הוסף את הנתיבים החדשים כאן \/
+// Dashboard routes
 app.get('/api/dashboard-data', async (req, res) => {
     const { userId } = req.query;
     try {
-        const result = await pool.query(
-            'SELECT * FROM dashboard_data WHERE user_id = $1',
+        const [rows] = await pool.query(
+            'SELECT * FROM dashboard_data WHERE user_id = ?',
             [userId]
         );
-        res.json(result.rows);
+        res.json(rows);
     } catch (error) {
         console.error('Error fetching dashboard data:', error);
         res.status(500).json({ error: 'שגיאה בטעינת הנתונים' });
@@ -206,26 +199,32 @@ app.get('/api/dashboard-data', async (req, res) => {
 });
 
 app.post('/api/dashboard-data', async (req, res) => {
-    console.log('התקבלה בקשה להוספת נתונים:', req.body);  // לוג חדש
+    console.log('התקבלה בקשה להוספת נתונים:', req.body);
 
     const { userId, name, email, phone, address } = req.body;
-
-    // בדיקה שכל השדות קיימים
-    console.log('ערכי השדות:', { userId, name, email, phone, address });  // לוג חדש
+    console.log('ערכי השדות:', { userId, name, email, phone, address });
 
     try {
-        const result = await pool.query(
-            'INSERT INTO dashboard_data (user_id, name, email, phone, address) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        const [result] = await pool.query(
+            'INSERT INTO dashboard_data (user_id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)',
             [userId, name, email, phone, address]
         );
-        console.log('הנתונים נוספו בהצלחה:', result.rows[0]);  // לוג חדש
-        res.status(201).json(result.rows[0]);
+
+        const [insertedRow] = await pool.query(
+            'SELECT * FROM dashboard_data WHERE id = ?',
+            [result.insertId]
+        );
+
+        console.log('הנתונים נוספו בהצלחה:', insertedRow[0]);
+        res.status(201).json(insertedRow[0]);
     } catch (error) {
-        console.error('שגיאה בהוספת נתונים לבסיס הנתונים:', error);  // לוג משופר
-        res.status(500).json({ error: 'שגיאה בשמירת הנתונים' });
+        console.error('שגיאה בהוספת נתונים לבסיס הנתונים:', error);
+        res.status(500).json({
+            error: 'שגיאה בשמירת הנתונים',
+            details: error.message
+        });
     }
 });
-// סוף הנתיבים החדשים /\
 
 // Error handler
 app.use((err, req, res, next) => {
