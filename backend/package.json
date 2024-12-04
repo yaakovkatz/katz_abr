@@ -1,0 +1,15 @@
+{
+  "name": "katz-abr-backend",
+  "version": "1.0.0",
+  "main": "server/utils/server.js",
+  "scripts": {
+    "start": "node server/utils/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "bcrypt": "^5.1.1",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "mysql2": "^3.6.5"
+  }
+}
