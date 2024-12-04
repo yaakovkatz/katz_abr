@@ -199,33 +199,65 @@ app.get('/api/dashboard-data', async (req, res) => {
 });
 
 app.post('/api/dashboard-data', async (req, res) => {
-    console.log('התקבלה בקשה להוספת נתונים:', req.body);
+    console.log('---------- התחלת בקשה חדשה ----------');
+    console.log('1. התקבלה בקשה להוספת נתונים:', req.body);
 
     const { userId, name, email, phone, address } = req.body;
-    console.log('ערכי השדות:', { userId, name, email, phone, address });
+
+    // בדיקת שדות חובה
+    if (!userId) {
+        console.error('2. שגיאה: חסר userId:', { userId });
+        return res.status(400).json({ error: 'חסר מזהה משתמש' });
+    }
+
+    if (!name || !email || !phone || !address) {
+        console.error('2. שגיאה: חסרים שדות:', { name, email, phone, address });
+        return res.status(400).json({ error: 'כל השדות הם חובה' });
+    }
+
+    console.log('2. כל השדות נמצאים:', { userId, name, email, phone, address });
 
     try {
+        // בדיקה שהמשתמש קיים
+        const [userRows] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
+        console.log('3. בדיקת משתמש:', userRows);
+
+        if (userRows.length === 0) {
+            console.error('4. משתמש לא נמצא:', userId);
+            return res.status(404).json({ error: 'משתמש לא נמצא' });
+        }
+
+        console.log('4. משתמש נמצא, מנסה להכניס נתונים');
+
         const [result] = await pool.query(
             'INSERT INTO dashboard_data (user_id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)',
             [userId, name, email, phone, address]
         );
+
+        console.log('5. הנתונים הוכנסו בהצלחה:', result);
 
         const [insertedRow] = await pool.query(
             'SELECT * FROM dashboard_data WHERE id = ?',
             [result.insertId]
         );
 
-        console.log('הנתונים נוספו בהצלחה:', insertedRow[0]);
+        console.log('6. שליפת הנתונים שהוכנסו:', insertedRow[0]);
         res.status(201).json(insertedRow[0]);
+
     } catch (error) {
-        console.error('שגיאה בהוספת נתונים לבסיס הנתונים:', error);
+        console.error('!!!! שגיאה !!!!');
+        console.error('סוג השגיאה:', error.code);
+        console.error('הודעת שגיאה:', error.message);
+        console.error('מיקום השגיאה:', error.stack);
+
         res.status(500).json({
             error: 'שגיאה בשמירת הנתונים',
             details: error.message
         });
     }
-});
 
+    console.log('---------- סוף בקשה ----------\n');
+});
 // Error handler
 app.use((err, req, res, next) => {
     console.error(err.stack);
