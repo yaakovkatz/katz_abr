@@ -12,12 +12,13 @@ const App = () => {
     console.log('1. Starting to check userId');
     const storedUserId = localStorage.getItem('userId');
     console.log('2. Stored user ID:', storedUserId, typeof storedUserId);
-    const userId = storedUserId ? parseInt(storedUserId) : null;
+
+    // אם לא נמצא ערך, מגדירים את userId כ-null, אחרת שומרים את הערך כמו שהוא
+    const userId = storedUserId || null;
     console.log('3. Final userId:', userId, typeof userId);
 
     // בדיקת כל התוכן של localStorage
     console.log('4. All localStorage items:', { ...localStorage });
-
 
     return (
         <Router>

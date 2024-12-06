@@ -11,24 +11,23 @@ const app = express();
 // Basic Middleware
 app.enable('trust proxy');
 
-app.use(cors({
-    origin: function(origin, callback) {
-        if (!origin
-            || origin.match(/http:\/\/localhost:[0-9]+/)
-            || origin === 'https://katz-abr.onrender.com'
-            || origin === 'https://katz-abr-backend.onrender.com') {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true
-}));
+app.use(cors());
 
 // Parsing middleware
 app.use(express.json());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, res, next) => {
+    console.log('התקבלה בקשה:', {
+        method: req.method,
+        url: req.url,
+        body: req.body,
+        query: req.query,
+        headers: req.headers
+    });
+    next();
+});
 
 // Create MySQL pool instead of PostgreSQL pool
 const pool = mysql.createPool(config.db);
@@ -200,48 +199,48 @@ app.get('/api/dashboard-data', async (req, res) => {
 
 app.post('/api/dashboard-data', async (req, res) => {
     console.log('---------- התחלת בקשה חדשה ----------');
-    console.log('1. התקבלה בקשה להוספת נתונים:', req.body);
-
     const { userId, name, email, phone, address } = req.body;
 
-    // בדיקת שדות חובה
-    if (!userId) {
-        console.error('2. שגיאה: חסר userId:', { userId });
-        return res.status(400).json({ error: 'חסר מזהה משתמש' });
+    // בדיקת גודל ה-ID - ממירים ל-number לפני ההשוואה
+    const MAX_USER_ID = 2147483647;
+    const numericUserId = parseInt(userId);
+    console.log('בדיקת גודל ID:', { userId, numericUserId, MAX_USER_ID });
+
+    if (numericUserId > MAX_USER_ID) {
+        console.log('ID גדול מדי - שולח שגיאה 400');
+        return res.status(400).json({ error: 'מזהה המשתמש גדול מדי' });
     }
 
+    console.log('1. התקבלה בקשה להוספת נתונים:', {
+        userId,
+        name,
+        email,
+        phone,
+        address
+    });
+
+    // בדיקת שדות חובה
     if (!name || !email || !phone || !address) {
-        console.error('2. שגיאה: חסרים שדות:', { name, email, phone, address });
+        console.error('שגיאה: חסרים שדות:', { name, email, phone, address });
         return res.status(400).json({ error: 'כל השדות הם חובה' });
     }
 
-    console.log('2. כל השדות נמצאים:', { userId, name, email, phone, address });
-
     try {
-        // בדיקה שהמשתמש קיים
-        const [userRows] = await pool.query('SELECT id FROM users WHERE id = ?', [userId]);
-        console.log('3. בדיקת משתמש:', userRows);
-
-        if (userRows.length === 0) {
-            console.error('4. משתמש לא נמצא:', userId);
-            return res.status(404).json({ error: 'משתמש לא נמצא' });
-        }
-
-        console.log('4. משתמש נמצא, מנסה להכניס נתונים');
+        console.log('2. מנסה להכניס נתונים עם userId:', userId);
 
         const [result] = await pool.query(
             'INSERT INTO dashboard_data (user_id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)',
             [userId, name, email, phone, address]
         );
 
-        console.log('5. הנתונים הוכנסו בהצלחה:', result);
+        console.log('3. הנתונים הוכנסו בהצלחה:', result);
 
         const [insertedRow] = await pool.query(
             'SELECT * FROM dashboard_data WHERE id = ?',
             [result.insertId]
         );
 
-        console.log('6. שליפת הנתונים שהוכנסו:', insertedRow[0]);
+        console.log('4. שליפת הנתונים שהוכנסו:', insertedRow[0]);
         res.status(201).json(insertedRow[0]);
 
     } catch (error) {

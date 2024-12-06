@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-axios.defaults.baseURL = 'https://katz-abr-backend.onrender.com';
+axios.defaults.baseURL = 'http://localhost:10000';
 const UserTable = ({ showModal, setShowModal, userId }) => {
     // ניהול מצב הטופס
     const [name, setName] = useState('');

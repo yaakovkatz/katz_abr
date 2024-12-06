@@ -1,9 +1,9 @@
 const config = {
     db: {
-        connectionString: process.env.DATABASE_URL || "postgresql://katz_user:DrLkurNuFADYmhRzMlb24g@hardy-badger-3148.jxf.gcp-europe-west1.cockroachlabs.cloud:26257/defaultdb?sslmode=verify-full",
-        ssl: {
-            rejectUnauthorized: false
-        }
+        host: 'localhost',
+        user: 'root',        // שם המשתמש שלך ב-MySQL
+        password: 'katz741258',        // הסיסמה שלך
+        database: 'my_app_db' // שם הדאטהבייס שיצרת
     }
 };
 
