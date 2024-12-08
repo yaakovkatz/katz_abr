@@ -198,64 +198,59 @@ app.get('/api/dashboard-data', async (req, res) => {
 });
 
 app.post('/api/dashboard-data', async (req, res) => {
-    console.log('---------- התחלת בקשה חדשה ----------');
-    const { userId, name, email, phone, address } = req.body;
-
-    // בדיקת גודל ה-ID - ממירים ל-number לפני ההשוואה
-    const MAX_USER_ID = 2147483647;
-    const numericUserId = parseInt(userId);
-    console.log('בדיקת גודל ID:', { userId, numericUserId, MAX_USER_ID });
-
-    if (numericUserId > MAX_USER_ID) {
-        console.log('ID גדול מדי - שולח שגיאה 400');
-        return res.status(400).json({ error: 'מזהה המשתמש גדול מדי' });
-    }
-
-    console.log('1. התקבלה בקשה להוספת נתונים:', {
-        userId,
-        name,
-        email,
-        phone,
-        address
-    });
-
-    // בדיקת שדות חובה
-    if (!name || !email || !phone || !address) {
-        console.error('שגיאה: חסרים שדות:', { name, email, phone, address });
-        return res.status(400).json({ error: 'כל השדות הם חובה' });
-    }
-
     try {
-        console.log('2. מנסה להכניס נתונים עם userId:', userId);
+        console.log('1. Start');
+        console.log('2. Body:', req.body);
 
-        const [result] = await pool.query(
-            'INSERT INTO dashboard_data (user_id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)',
-            [userId, name, email, phone, address]
-        );
+        const { name, email, phone, address } = req.body;
+        const tempUserId = 1;  // ערך קבוע זמני
 
-        console.log('3. הנתונים הוכנסו בהצלחה:', result);
+        console.log('3. After destructuring:', { name, email, phone, address });
 
-        const [insertedRow] = await pool.query(
-            'SELECT * FROM dashboard_data WHERE id = ?',
-            [result.insertId]
-        );
+        // בדיקת שדות חובה
+        if (!name || !email || !phone || !address) {
+            console.error('Missing fields:', { name, email, phone, address });
+            return res.status(400).json({ error: 'כל השדות הם חובה' });
+        }
 
-        console.log('4. שליפת הנתונים שהוכנסו:', insertedRow[0]);
-        res.status(201).json(insertedRow[0]);
+        try {
+            console.log('5. Attempting DB insert');
+
+            const [result] = await pool.query(
+                'INSERT INTO dashboard_data (user_id, name, email, phone, address) VALUES (?, ?, ?, ?, ?)',
+                [tempUserId, name, email, phone, address]  // משתמשים בערך הקבוע
+            );
+            console.log('6. Insert success:', result);
+
+            const [insertedRow] = await pool.query(
+                'SELECT * FROM dashboard_data WHERE id = ?',
+                [result.insertId]
+            );
+            console.log('7. Retrieved inserted data:', insertedRow[0]);
+
+            res.status(201).json(insertedRow[0]);
+        } catch (dbError) {
+            console.error('Database error:', {
+                code: dbError.code,
+                message: dbError.message,
+                stack: dbError.stack
+            });
+
+            res.status(500).json({
+                error: 'שגיאה בשמירת הנתונים',
+                details: dbError.message
+            });
+        }
 
     } catch (error) {
-        console.error('!!!! שגיאה !!!!');
-        console.error('סוג השגיאה:', error.code);
-        console.error('הודעת שגיאה:', error.message);
-        console.error('מיקום השגיאה:', error.stack);
-
+        console.error('Unexpected error:', error);
         res.status(500).json({
-            error: 'שגיאה בשמירת הנתונים',
+            error: 'שגיאה בלתי צפויה',
             details: error.message
         });
+    } finally {
+        console.log('8. Request complete\n----------\n');
     }
-
-    console.log('---------- סוף בקשה ----------\n');
 });
 // Error handler
 app.use((err, req, res, next) => {

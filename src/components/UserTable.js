@@ -117,15 +117,13 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
     const handleAddOrUpdateData = async () => {
         if (!validateForm()) return;
 
-        console.log('userId before sending:', userId); // נוסיף את זה כדי לראות את הערך
-
+        console.log('Form data being sent:', { name, email, phone, address });
 
         try {
             if (editingItem) {
                 const response = await axios.put(
                     `/api/dashboard-data/${editingItem.id}`,
-                    { name, email, phone, address },
-                    { params: { userId } }
+                    { name, email, phone, address }
                 );
                 const updatedData = data.map(item =>
                     item.id === editingItem.id ? response.data : item
@@ -135,27 +133,25 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                 showToast('הנתונים עודכנו בהצלחה');
             } else {
                 const response = await axios.post('/api/dashboard-data', {
-                    userId,
                     name,
                     email,
                     phone,
                     address
                 });
                 const refreshResponse = await axios.get('/api/dashboard-data', {
-                    params: { userId }
+                    params: { userId: 1 }  // ערך קבוע לבדיקה
                 });
 
-                // עדכון המצב
                 setData(refreshResponse.data);
                 setFilteredData(refreshResponse.data);
                 showToast('נוספו נתונים חדשים בהצלחה');
             }
             resetForm();
         } catch (error) {
+            console.error('Error details:', error.response?.data || error);
             showToast('שגיאה בשמירת נתונים', 'error');
         }
     };
-
     const resetForm = () => {
         setName('');
         setEmail('');
