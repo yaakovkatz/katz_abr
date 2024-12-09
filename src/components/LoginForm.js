@@ -4,7 +4,10 @@ import { validatePassword, validateEmail } from '../validation';
 import { Link, useNavigate } from 'react-router-dom';
 
 // קבועים וקונפיגורציה
-const API_URL = 'https://katz-abr.onrender.com';
+
+const API_URL = 'http://localhost:10000';
+
+////const API_URL = 'https://katz-abr.onrender.com';
 
 const LoginForm = () => {
     // ניהול סטייט
