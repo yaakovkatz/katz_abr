@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 axios.defaults.baseURL = 'http://localhost:10000';
+
 const UserTable = ({ showModal, setShowModal, userId }) => {
     // ניהול מצב הטופס
     const [name, setName] = useState('');
@@ -12,7 +13,7 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
 
     // ניהול מצב הנתונים והתצוגה
     const [data, setData] = useState([]);
-    const [filteredData, setFilteredData] = useState(data);
+    const [filteredData, setFilteredData] = useState([]);
     const [globalSearch, setGlobalSearch] = useState('');
     const [expandedRow, setExpandedRow] = useState(null);
     const [filterCriteria, setFilterCriteria] = useState({
@@ -26,31 +27,22 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
     const [viewType, setViewType] = useState('table');
     const [editingItem, setEditingItem] = useState(null);
 
-
-
-    useEffect(() => {
-        if (data) {
-            setFilteredData(data);
-        }
-    }, [data]);
-
     // טעינת נתונים ראשונית
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const response = await axios.get(`/api/dashboard-data`, {
-                    params: { userId }
+                const response = await axios.get('/api/dashboard-data', {
+                    params: { userId: 1 }
                 });
                 setData(response.data);
                 setFilteredData(response.data);
             } catch (error) {
+                console.error('Error fetching data:', error);
                 showToast('שגיאה בטעינת נתונים', 'error');
             }
         };
 
-        if (userId) {
-            fetchData();
-        }
+        fetchData();
     }, [userId]);
 
     // פונקציות טיפול במידע
@@ -67,9 +59,16 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
         if (window.confirm('האם אתה בטוח שברצונך למחוק נתון זה?')) {
             try {
                 await axios.delete(`/api/dashboard-data/${id}`, {
-                    params: { userId }
+                    params: { userId: 1 }
                 });
-                setData(data.filter(item => item.id !== id));
+
+                // רענון הנתונים מהשרת
+                const refreshResponse = await axios.get('/api/dashboard-data', {
+                    params: { userId: 1 }  // משתמשים בערך הקבוע שלנו
+                });
+
+                setData(refreshResponse.data);
+                setFilteredData(refreshResponse.data);
                 showToast('הנתון נמחק בהצלחה');
             } catch (error) {
                 showToast('שגיאה במחיקת נתונים', 'error');
@@ -77,6 +76,46 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
         }
     };
 
+    const handleAddOrUpdateData = async () => {
+        if (!validateForm()) return;
+
+        console.log('Form data being sent:', { name, email, phone, address });
+
+        try {
+            if (editingItem) {
+                const response = await axios.put(
+                    `/api/dashboard-data/${editingItem.id}`,
+                    { name, email, phone, address, userId: 1  }
+                );
+                const updatedData = data.map(item =>
+                    item.id === editingItem.id ? response.data : item
+                );
+                setData(updatedData);
+                setEditingItem(null);
+                showToast('הנתונים עודכנו בהצלחה');
+            } else {
+                const response = await axios.post('/api/dashboard-data', {
+                    name,
+                    email,
+                    phone,
+                    address,
+                    userId: 1 // הוספת userId
+
+                });
+                const refreshResponse = await axios.get('/api/dashboard-data', {
+                    params: { userId: 1 }  // ערך קבוע לבדיקה
+                });
+
+                setData(refreshResponse.data);
+                setFilteredData(refreshResponse.data);
+                showToast('נוספו נתונים חדשים בהצלחה');
+            }
+            resetForm();
+        } catch (error) {
+            console.error('Error details:', error.response?.data || error);
+            showToast('שגיאה בשמירת נתונים', 'error');
+        }
+    };
     const toggleRow = (id) => {
         setExpandedRow(expandedRow === id ? null : id);
     };
@@ -114,44 +153,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
         return true;
     };
 
-    const handleAddOrUpdateData = async () => {
-        if (!validateForm()) return;
-
-        console.log('Form data being sent:', { name, email, phone, address });
-
-        try {
-            if (editingItem) {
-                const response = await axios.put(
-                    `/api/dashboard-data/${editingItem.id}`,
-                    { name, email, phone, address }
-                );
-                const updatedData = data.map(item =>
-                    item.id === editingItem.id ? response.data : item
-                );
-                setData(updatedData);
-                setEditingItem(null);
-                showToast('הנתונים עודכנו בהצלחה');
-            } else {
-                const response = await axios.post('/api/dashboard-data', {
-                    name,
-                    email,
-                    phone,
-                    address
-                });
-                const refreshResponse = await axios.get('/api/dashboard-data', {
-                    params: { userId: 1 }  // ערך קבוע לבדיקה
-                });
-
-                setData(refreshResponse.data);
-                setFilteredData(refreshResponse.data);
-                showToast('נוספו נתונים חדשים בהצלחה');
-            }
-            resetForm();
-        } catch (error) {
-            console.error('Error details:', error.response?.data || error);
-            showToast('שגיאה בשמירת נתונים', 'error');
-        }
-    };
     const resetForm = () => {
         setName('');
         setEmail('');
@@ -276,7 +277,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                         type="text"
                         className="form-control"
                         placeholder="סנן לפי שם"
-                        name="name"
                         value={filterCriteria.name}
                         onChange={(e) => setFilterCriteria(prev => ({
                             ...prev,
@@ -287,7 +287,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                         type="text"
                         className="form-control"
                         placeholder="סנן לפי אימייל"
-                        name="email"
                         value={filterCriteria.email}
                         onChange={(e) => setFilterCriteria(prev => ({
                             ...prev,
@@ -298,7 +297,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                         type="text"
                         className="form-control"
                         placeholder="סנן לפי טלפון"
-                        name="phone"
                         value={filterCriteria.phone}
                         onChange={(e) => setFilterCriteria(prev => ({
                             ...prev,
@@ -309,7 +307,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                         type="text"
                         className="form-control"
                         placeholder="סנן לפי כתובת"
-                        name="address"
                         value={filterCriteria.address}
                         onChange={(e) => setFilterCriteria(prev => ({
                             ...prev,
@@ -322,7 +319,7 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
             {/* תצוגת נתונים */}
             {viewType === 'table' ? (
                 <div className="accordion" id="userAccordion">
-                    {filteredData.map((item, index) => (
+                    {filteredData.map((item) => (
                         <div className="accordion-item" key={item.id}>
                             <h2 className="accordion-header">
                                 <button
