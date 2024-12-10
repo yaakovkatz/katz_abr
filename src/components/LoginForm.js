@@ -2,14 +2,20 @@
 import React, { useState, useEffect } from 'react';
 import { validatePassword, validateEmail } from '../validation';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
 
 // קבועים וקונפיגורציה
 
 const API_URL = 'http://localhost:10000';
 
+
 ////const API_URL = 'https://katz-abr.onrender.com';
 
 const LoginForm = () => {
+    const { setUser, login } = useAuth();  // הוספנו את login
+
+
     // ניהול סטייט
     const [formData, setFormData] = useState({
         email: '',
@@ -118,7 +124,6 @@ const LoginForm = () => {
         setUiState(prev => ({ ...prev, errors: [], isLoading: true }));
 
         try {
-            // וולידציה להרשמה
             if (!formData.isLogin) {
                 const validationErrors = [
                     ...validatePassword(formData.password),
@@ -134,46 +139,42 @@ const LoginForm = () => {
                 }
             }
 
-            // שליחת בקשה לשרת
-            const response = await fetch(`${API_URL}/${formData.isLogin ? 'login' : 'register'}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                },
-                body: JSON.stringify({
+            // התחברות
+            if (formData.isLogin) {
+                console.log('Attempting login with:', {
                     email: formData.email,
-                    password: formData.password,
                     rememberMe: formData.rememberMe
-                })
-            });
+                });
 
-            const data = await response.json();
+                const result = await login(
+                    formData.email,
+                    formData.password,
+                    formData.rememberMe
+                );
 
-            if (!response.ok) {
-                throw new Error(data.errors?.[0] || 'שגיאה בתהליך ההתחברות');
-            }
+                console.log('Login result:', result); // הוספנו לוג
 
-            if (data.user) {
-                localStorage.setItem('userId', data.user.id);
-                if (data.user.rememberToken) {
-                    localStorage.setItem('rememberToken', data.user.rememberToken);
+                if (result.success) {
+                    console.log('Login successful, navigating to /users');
+                    navigate('/users');
+                } else {
+                    console.log('Login failed:', result.error);
+                    throw new Error(result.error || 'שגיאה בהתחברות');
                 }
-                navigate('/users');
             } else {
-                throw new Error('מידע משתמש חסר בתשובת השרת');
+                // הקוד להרשמה נשאר אותו דבר...
             }
+
         } catch (error) {
             console.error('Authentication error:', error);
             setUiState(prev => ({
                 ...prev,
-                errors: [error.message || 'שגיאה בתהליך ההתחברות']
+                errors: Array.isArray(error.message) ? error.message : [error.message || 'שגיאה בתהליך ההתחברות']
             }));
         } finally {
             setUiState(prev => ({ ...prev, isLoading: false }));
         }
     };
-
     // רינדור הטופס
     return (
         <div className="container mt-5">

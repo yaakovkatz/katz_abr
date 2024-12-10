@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
-axios.defaults.baseURL = 'http://localhost:10000';
+const API_URL = 'http://localhost:10000';
 
-const UserTable = ({ showModal, setShowModal, userId }) => {
-    // ניהול מצב הטופס
+const UserTable = ({ showModal, setShowModal }) => {
+    const { user, loading } = useAuth();
+
+    // States
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [address, setAddress] = useState('');
     const [formError, setFormError] = useState(null);
-
-    // ניהול מצב הנתונים והתצוגה
     const [data, setData] = useState([]);
     const [filteredData, setFilteredData] = useState([]);
     const [globalSearch, setGlobalSearch] = useState('');
@@ -27,115 +28,53 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
     const [viewType, setViewType] = useState('table');
     const [editingItem, setEditingItem] = useState(null);
 
-    // טעינת נתונים ראשונית
+    // Fetch Data
     useEffect(() => {
         const fetchData = async () => {
-            try {
-                const response = await axios.get('/api/dashboard-data', {
-                    params: { userId: 1 }
-                });
-                setData(response.data);
-                setFilteredData(response.data);
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                showToast('שגיאה בטעינת נתונים', 'error');
+            if (user?.id) {
+                try {
+                    const response = await axios.get(`${API_URL}/api/dashboard-data`, {
+                        params: { userId: user.id }
+                    });
+                    setData(response.data.data);
+                    setFilteredData(response.data.data);
+                } catch (error) {
+                    console.error('Error fetching data:', error);
+                    showToast('שגיאה בטעינת נתונים', 'error');
+                }
             }
         };
-
         fetchData();
-    }, [userId]);
+    }, [user?.id]);
 
-    // פונקציות טיפול במידע
-    const handleEdit = (item) => {
-        setEditingItem(item);
-        setName(item.name);
-        setEmail(item.email);
-        setPhone(item.phone);
-        setAddress(item.address);
-        setShowModal(true);
-    };
+    // Filter and Sort Data
+    useEffect(() => {
+        let filtered = data;
 
-    const handleDelete = async (id) => {
-        if (window.confirm('האם אתה בטוח שברצונך למחוק נתון זה?')) {
-            try {
-                await axios.delete(`/api/dashboard-data/${id}`, {
-                    params: { userId: 1 }
-                });
-
-                // רענון הנתונים מהשרת
-                const refreshResponse = await axios.get('/api/dashboard-data', {
-                    params: { userId: 1 }  // משתמשים בערך הקבוע שלנו
-                });
-
-                setData(refreshResponse.data);
-                setFilteredData(refreshResponse.data);
-                showToast('הנתון נמחק בהצלחה');
-            } catch (error) {
-                showToast('שגיאה במחיקת נתונים', 'error');
-            }
+        if (globalSearch) {
+            filtered = filtered.filter(item =>
+                Object.values(item).some(val =>
+                    val?.toString().toLowerCase().includes(globalSearch.toLowerCase())
+                )
+            );
         }
-    };
 
-    const handleAddOrUpdateData = async () => {
-        if (!validateForm()) return;
+        filtered = filtered.filter(item =>
+            Object.keys(filterCriteria).every(key =>
+                item[key]?.toString().toLowerCase().includes(filterCriteria[key].toLowerCase())
+            )
+        );
 
-        console.log('Form data being sent:', { name, email, phone, address });
+        filtered.sort((a, b) => {
+            if (a[sortColumn] < b[sortColumn]) return sortDirection === 'asc' ? -1 : 1;
+            if (a[sortColumn] > b[sortColumn]) return sortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
 
-        try {
-            if (editingItem) {
-                const response = await axios.put(
-                    `/api/dashboard-data/${editingItem.id}`,
-                    { name, email, phone, address, userId: 1  }
-                );
-                const updatedData = data.map(item =>
-                    item.id === editingItem.id ? response.data : item
-                );
-                setData(updatedData);
-                setEditingItem(null);
-                showToast('הנתונים עודכנו בהצלחה');
-            } else {
-                const response = await axios.post('/api/dashboard-data', {
-                    name,
-                    email,
-                    phone,
-                    address,
-                    userId: 1 // הוספת userId
+        setFilteredData(filtered);
+    }, [data, filterCriteria, sortColumn, sortDirection, globalSearch]);
 
-                });
-                const refreshResponse = await axios.get('/api/dashboard-data', {
-                    params: { userId: 1 }  // ערך קבוע לבדיקה
-                });
-
-                setData(refreshResponse.data);
-                setFilteredData(refreshResponse.data);
-                showToast('נוספו נתונים חדשים בהצלחה');
-            }
-            resetForm();
-        } catch (error) {
-            console.error('Error details:', error.response?.data || error);
-            showToast('שגיאה בשמירת נתונים', 'error');
-        }
-    };
-    const toggleRow = (id) => {
-        setExpandedRow(expandedRow === id ? null : id);
-    };
-
-    // פונקציות עזר
-    const showToast = (message, type = 'success') => {
-        const toastDiv = document.createElement('div');
-        toastDiv.className = `toast show position-fixed bottom-0 end-0 m-3 bg-${type}`;
-        toastDiv.style.zIndex = '1000';
-        toastDiv.innerHTML = `
-            <div class="toast-body text-white">
-                ${message}
-            </div>
-        `;
-        document.body.appendChild(toastDiv);
-        setTimeout(() => {
-            toastDiv.remove();
-        }, 3000);
-    };
-
+    // Validate Form
     const validateForm = () => {
         setFormError(null);
         if (!name.trim()) {
@@ -163,9 +102,101 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
         setShowModal(false);
     };
 
+    const showToast = (message, type = 'success') => {
+        const toastDiv = document.createElement('div');
+        toastDiv.className = `toast show position-fixed bottom-0 end-0 m-3 bg-${type}`;
+        toastDiv.style.zIndex = '1000';
+        toastDiv.innerHTML = `
+            <div class="toast-body text-white">
+                ${message}
+            </div>
+        `;
+        document.body.appendChild(toastDiv);
+        setTimeout(() => {
+            toastDiv.remove();
+        }, 3000);
+    };
+
+    const handleEdit = (item) => {
+        setEditingItem(item);
+        setName(item.name);
+        setEmail(item.email);
+        setPhone(item.phone);
+        setAddress(item.address);
+        setShowModal(true);
+    };
+
+    const handleDelete = async (id) => {
+        if (!user?.id) {
+            showToast('לא נמצא משתמש מחובר', 'error');
+            return;
+        }
+
+        if (window.confirm('האם אתה בטוח שברצונך למחוק נתון זה?')) {
+            try {
+                await axios.delete(`${API_URL}/api/dashboard-data/${id}`, {
+                    params: { userId: user.id }
+                });
+                const updatedData = data.filter(item => item.id !== id);
+                setData(updatedData);
+                setFilteredData(updatedData);
+                showToast('הנתון נמחק בהצלחה');
+            } catch (error) {
+                showToast('שגיאה במחיקת נתונים', 'error');
+            }
+        }
+    };
+
+    const handleAddOrUpdateData = async () => {
+        if (!validateForm()) return;
+        if (!user?.id) {
+            setFormError('לא נמצא משתמש מחובר');
+            return;
+        }
+
+        try {
+            if (editingItem) {
+                await axios.put(`${API_URL}/api/dashboard-data/${editingItem.id}`, {
+                    name,
+                    email,
+                    phone,
+                    address,
+                    userId: user.id
+                });
+                const updatedData = data.map(item =>
+                    item.id === editingItem.id ? { ...item, name, email, phone, address } : item
+                );
+                setData(updatedData);
+                setFilteredData(updatedData);
+                showToast('נתונים עודכנו בהצלחה');
+            } else {
+                const response = await axios.post(`${API_URL}/api/dashboard-data`, {
+                    name,
+                    email,
+                    phone,
+                    address,
+                    userId: user.id
+                });
+                const newItem = response.data;
+                const updatedData = [...data, newItem];
+                setData(updatedData);
+                setFilteredData(updatedData);
+                showToast('נוספו נתונים חדשים בהצלחה');
+            }
+            resetForm();
+        } catch (error) {
+            console.error('Error details:', error.response?.data || error);
+            showToast('שגיאה בשמירת נתונים', 'error');
+        }
+    };
+
+    const toggleRow = (id) => {
+        setExpandedRow(expandedRow === id ? null : id);
+    };
+
     const exportData = () => {
         const dataStr = JSON.stringify(filteredData, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
         const exportFileDefaultName = 'dashboard-data.json';
         const linkElement = document.createElement('a');
         linkElement.setAttribute('href', dataUri);
@@ -174,37 +205,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
         showToast('הנתונים יוצאו בהצלחה');
     };
 
-    // פילטור ומיון נתונים
-    useEffect(() => {
-        let filtered = data;
-
-        // Global search
-        if (globalSearch) {
-            filtered = filtered.filter(item =>
-                Object.values(item).some(val =>
-                    val?.toString().toLowerCase().includes(globalSearch.toLowerCase())
-                )
-            );
-        }
-
-        // Specific filters
-        filtered = filtered.filter(item =>
-            Object.keys(filterCriteria).every(key =>
-                item[key]?.toString().toLowerCase().includes(filterCriteria[key].toLowerCase())
-            )
-        );
-
-        // Sorting
-        filtered.sort((a, b) => {
-            if (a[sortColumn] < b[sortColumn]) return sortDirection === 'asc' ? -1 : 1;
-            if (a[sortColumn] > b[sortColumn]) return sortDirection === 'asc' ? 1 : -1;
-            return 0;
-        });
-
-        setFilteredData(filtered);
-    }, [data, filterCriteria, sortColumn, sortDirection, globalSearch]);
-
-    // קומפוננטת תצוגת כרטיסיה
     const CardView = ({ item }) => (
         <div className="card h-100">
             <div className="card-body d-flex flex-column">
@@ -215,10 +215,7 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                 <div className="mt-auto">
                     <button className="btn btn-link p-0 me-3" onClick={() => handleEdit(item)}>✏️</button>
                     <button className="btn btn-link p-0 me-3" onClick={() => handleDelete(item.id)}>🗑️</button>
-                    <button
-                        className="btn btn-link p-0"
-                        onClick={() => toggleRow(item.id)}
-                    >
+                    <button className="btn btn-link p-0" onClick={() => toggleRow(item.id)}>
                         {expandedRow === item.id ? '▲' : '▼'}
                     </button>
                 </div>
@@ -233,14 +230,10 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
 
     return (
         <div className="container mt-5">
-            {/* כותרת וכפתורי פעולה */}
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h2>לוח בקרה</h2>
                 <div>
-                    <button
-                        className="btn btn-primary me-2"
-                        onClick={() => setShowModal(true)}
-                    >
+                    <button className="btn btn-primary me-2" onClick={() => setShowModal(true)}>
                         הוסף נתונים חדשים ➕
                     </button>
                     <button className="btn btn-success me-2" onClick={exportData}>
@@ -263,7 +256,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                 </div>
             </div>
 
-            {/* חיפוש וסינון */}
             <div className="mb-3">
                 <input
                     type="text"
@@ -316,7 +308,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                 </div>
             </div>
 
-            {/* תצוגת נתונים */}
             {viewType === 'table' ? (
                 <div className="accordion" id="userAccordion">
                     {filteredData.map((item) => (
@@ -375,7 +366,6 @@ const UserTable = ({ showModal, setShowModal, userId }) => {
                 </div>
             )}
 
-            {/* מודל הוספה/עריכה */}
             {showModal && (
                 <>
                     <div className="modal show d-block">
