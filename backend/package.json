@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node backend/server.js",
+    "build": "npm install && npm rebuild bcrypt --build-from-source"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
